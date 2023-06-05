@@ -1,0 +1,62 @@
+name: The Determinate Systems flake checker
+description: TODO
+branding:
+  icon: "box"
+  color: "purple"
+inputs:
+  flake-lock-path:
+    description: TODO
+    default: flake.lock
+  send-statistics:
+    description: |
+      Anonymously report the number issues detected by the flake checker, which helps
+      measure the effectiveness of the flake checker. Set to `false` to disable.
+    default: true
+  check-outdated:
+    description: TODO
+    default: true
+  check-owner:
+    description: TODO
+    default: true
+  check-supported:
+    description: TODO
+    default: true
+  ignore-missing-flake-lock:
+    description: TODO
+    default: true
+runs:
+  using: composite
+  steps:
+    - name: Install the flake checker
+      shell: bash
+      run: |
+        (
+          set -eu
+          
+          curl --max-time 2 --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/flake-checker/stable/$RUNNER_ARCH-$RUNNER_OS > "$RUNNER_TEMP/flake-checker"
+          chmod +x "$RUNNER_TEMP/flake-checker"
+
+          export NIX_FLAKE_CHECKER_FLAKE_LOCK_PATH="${{ inputs.flake-lock-path }}"
+
+          if [ "${{ inputs.send-statistics }}" == "false" ]; then
+            export NIX_FLAKE_CHECKER_NO_TELEMETRY="false"
+          fi
+
+          if [ "${{ inputs.check-outdated }}" == "false" ]; then
+            export NIX_FLAKE_CHECKER_CHECK_OUTDATED="false"
+          fi
+
+          if [ "${{ inputs.check-owner }}" == "false" ]; then
+            export NIX_FLAKE_CHECKER_CHECK_OWNER="false"
+          fi
+
+          if [ "${{ inputs.check-supported }}" == "false" ]; then
+            export NIX_FLAKE_CHECKER_CHECK_SUPPORTED="false"
+          fi
+
+          if [ "${{ inputs.ignore-missing-flake-lock }}" == "false" ]; then
+            export NIX_FLAKE_CHECKER_IGNORE_MISSING_FLAKE_LOCK="false"
+          fi
+
+          "$RUNNER_TEMP/flake-checker"
+        ) || true
