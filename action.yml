@@ -1,28 +1,38 @@
 name: The Determinate Systems flake checker
-description: TODO
+description: |
+  A GitHub Action that performs health checks on your `flake.lock` file
 branding:
   icon: "box"
   color: "purple"
 inputs:
   flake-lock-path:
-    description: TODO
+    description: |
+      The path to the `flake.lock` file you want to check.
     default: flake.lock
   send-statistics:
     description: |
-      Anonymously report the number issues detected by the flake checker, which helps
+      Anonymously report the number of issues detected by the flake checker. This reporting helps
       measure the effectiveness of the flake checker. Set to `false` to disable.
     default: true
   check-outdated:
-    description: TODO
+    description: |
+      Whether to check that the root Nixpkgs input is less than 30 days old.
     default: true
   check-owner:
-    description: TODO
+    description: |
+      Whether to check that the root Nixpkgs input has the `NixOS` GitHub org as its owner.
     default: true
   check-supported:
-    description: TODO
+    description: |
+      Whether to check that the root Nixpkgs input has a supported Git ref. Currently supported
+      ref: `nixos-22.11`, `nixos-22.11-small`, `nixos-23.05`, `nixos-23.05-small`, `nixos-unstable`,
+      `nixos-unstable-small`, `nixpkgs-22.11-darwin`, `nixpkgs-23.05-darwin`, `nixpkgs-unstable`.
     default: true
   ignore-missing-flake-lock:
-    description: TODO
+    description: |
+      Whether to ignore a missing `flake.lock` file, where the path to the file is the value of
+      `flake-lock-path` parameter. If set to `false` (the default is `true`), the Action throws
+      an error if the lockfile is missing.
     default: true
 runs:
   using: composite
@@ -32,7 +42,7 @@ runs:
       run: |
         (
           set -eu
-          
+
           curl --max-time 2 --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/flake-checker/stable/$RUNNER_ARCH-$RUNNER_OS > "$RUNNER_TEMP/flake-checker"
           chmod +x "$RUNNER_TEMP/flake-checker"
 
