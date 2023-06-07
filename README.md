@@ -1,9 +1,9 @@
-# flake-checker-action
+# The Determinate Flake Checker Action
 
-The `flake-checker-action` from [Determinate Systems][ds] performs health checks on your repos' [`flake.lock`][lock] files.
+This flake checker [Action] from [Determinate Systems][detsys] performs health checks on your repos' [`flake.lock`][lock] files.
 Specifically, it checks that your root [Nixpkgs] input:
 
-* Was updated within the last 30 days
+* Has been updated within the last 30 days
 * Has the [`NixOS`][nixos-org] GitHub org as its owner
 * Is from a supported Git branch
 
@@ -29,7 +29,8 @@ jobs:
         run: nix build
 ```
 
-[ds]: https://determinate.systems
+[action]: https://github.com/features/actions
+[detsys]: https://determinate.systems
 [lock]: https://zero-to-nix.com/concepts/flakes#lockfile
 [nixos-org]: https://github.com/NixOS
 [nixpkgs]: https://github.com/NixOS/nixpkgs
