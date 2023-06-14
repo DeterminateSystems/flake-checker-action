@@ -1,11 +1,11 @@
-# The Flake Checker Action
+# The Nix Flake Checker Action
 
 This repo houses a [Github Action][action] from [Determinate Systems][detsys] that performs health checks on your repos' [`flake.lock`][lock] files.
-Specifically, it wraps the [Flake Checker][flake-checker] tool, which verifies that your root [Nixpkgs] input:
+Specifically, it wraps the [Nix Flake Checker][flake-checker] tool, which verifies that your root [Nixpkgs] inputs:
 
-* Has been updated within the last 30 days
-* Has the [`NixOS`][nixos-org] GitHub org as its owner
-* Is from a supported Git branch
+* Have been updated within the last 30 days
+* Have the [`NixOS`][nixos-org] GitHub org as their owner
+* Are from a supported Git branch
 
 Here's an example configuration that uses `flake-checker-action` as part of a broader Actions workflow involving Nix.
 
@@ -22,7 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Check Nix flake inputs
-        uses: DeterminateSystems/flake-checker-action@v1 # This action
+        uses: DeterminateSystems/flake-checker-action@v2 # This action
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@v3
       - name: Build default package
@@ -31,7 +31,7 @@ jobs:
 
 ## Configuration
 
-The Flake Checker Action has a number of configuration parameters that you can set in the `with` block:
+The Nix Flake Checker Action has a number of configuration parameters that you can set in the `with` block:
 
 Parameter | Description | Default
 :---------|:------------|:-------
@@ -47,7 +47,7 @@ Here's an example non-default configuration:
 
 ```yaml
 - name: Check Nix flake inputs
-  uses: DeterminateSystems/flake-checker-action@v1
+  uses: DeterminateSystems/flake-checker-action@v2
   with:
     flake-lock-path: ./nix/flake.lock
     check-owner: false
@@ -61,3 +61,4 @@ Here's an example non-default configuration:
 [lock]: https://zero-to-nix.com/concepts/flakes#lockfile
 [nixos-org]: https://github.com/NixOS
 [nixpkgs]: https://github.com/NixOS/nixpkgs
+
