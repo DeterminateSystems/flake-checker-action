@@ -34,8 +34,8 @@ inputs:
     default: false
   send-statistics:
     description: |
-      Anonymously report the number of issues detected by the flake checker. This reporting helps
-      measure the effectiveness of the flake checker. Set to `false` to disable.
+      Anonymously report the number of issues detected by the Nix Flake Checker. This reporting helps
+      measure (and thereby improve) the effectiveness of the checker. Set to `false` to disable.
     default: true
 runs:
   using: composite
