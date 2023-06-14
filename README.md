@@ -29,6 +29,30 @@ jobs:
         run: nix build
 ```
 
+## Configuration
+
+The Flake Checker Action has a number of configuration parameters that you can set in the `with` block:
+
+Parameter | Description | Default
+:---------|:------------|:-------
+`flake-lock-path` | The path to the `flake.lock` file you want to check. | `flake.lock`
+`check-outdated` | Whether to check that the root Nixpkgs input is less than 30 days old. | `true`
+`check-owner` | Whether to check that the root Nixpkgs input has the `NixOS` GitHub org as its owner. | `true`
+`check-supported` | Whether to check that the root Nixpkgs input has a supported Git ref. Currently supported refs: `nixos-22.11`, `nixos-22.11-small`, `nixos-23.05`, `nixos-23.05-small`, `nixos-unstable`, `nixos-unstable-small`, `nixpkgs-22.11-darwin`, `nixpkgs-23.05-darwin`, `nixpkgs-unstable`. | `true`
+`ignore-missing-flake-lock` | Whether to ignore a missing `flake.lock` file, where the path to the file is the value of `flake-lock-path` parameter. If set to `false` (the default is `true`), the Action throws an error and the job fails if the lockfile is missing. | `true`
+`send-statistics` | Anonymously report the number of issues detected by the flake checker. This reporting helps measure the effectiveness of the flake checker. Set to `false` to disable. | `true`
+
+Here's an example non-default configuration:
+
+```yaml
+- name: Check Nix flake inputs
+  uses: DeterminateSystems/flake-checker-action@v1
+  with:
+    flake-lock-path: ./nix/flake.lock
+    check-owner: false
+    ignore-missing-flake-lock: false
+```
+
 [action]: https://github.com/features/actions
 [detsys]: https://determinate.systems
 [lock]: https://zero-to-nix.com/concepts/flakes#lockfile
