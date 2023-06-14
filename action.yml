@@ -29,6 +29,9 @@ inputs:
       `flake-lock-path` parameter. If set to `false` (the default is `true`), the Action throws
       an error and the job fails if the lockfile is missing.
     default: true
+  fail-mode:
+    description: Fail with an exit code of 1 if any issues are encountered.
+    default: false
   send-statistics:
     description: |
       Anonymously report the number of issues detected by the flake checker. This reporting helps
@@ -66,6 +69,10 @@ runs:
 
           if [ "${{ inputs.ignore-missing-flake-lock }}" == "false" ]; then
             export NIX_FLAKE_CHECKER_IGNORE_MISSING_FLAKE_LOCK="false"
+          fi
+
+          if [ "${{ inputs.fail-mode }}" == "true" ]; then
+            export NIX_FLAKE_CHECKER_FAIL_MODE="true"
           fi
 
           "$RUNNER_TEMP/flake-checker"
