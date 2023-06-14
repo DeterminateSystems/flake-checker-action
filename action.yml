@@ -1,6 +1,6 @@
 name: The Nix Flake Checker Action
 description: |
-  A GitHub Action from [Determinate Systems](https://determinate.systems) that performs health checks on your `flake.lock` file
+  A GitHub Action from Determinate Systems that performs health checks on your `flake.lock` file
 branding:
   icon: "box"
   color: "purple"
