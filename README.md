@@ -40,6 +40,7 @@ Parameter | Description | Default
 `check-owner` | Whether to check that the root Nixpkgs input has the `NixOS` GitHub org as its owner. | `true`
 `check-supported` | Whether to check that the root Nixpkgs input has a supported Git ref. Currently supported refs: `nixos-22.11`, `nixos-22.11-small`, `nixos-23.05`, `nixos-23.05-small`, `nixos-unstable`, `nixos-unstable-small`, `nixpkgs-22.11-darwin`, `nixpkgs-23.05-darwin`, `nixpkgs-unstable`. | `true`
 `ignore-missing-flake-lock` | Whether to ignore a missing `flake.lock` file, where the path to the file is the value of `flake-lock-path` parameter. If set to `false` (the default is `true`), the Action throws an error and the job fails if the lockfile is missing. | `true`
+`fail-mode` | Fail with an exit code of 1 if any issues are encountered. | `false`
 `send-statistics` | Anonymously report the number of issues detected by the flake checker. This reporting helps measure the effectiveness of the flake checker. Set to `false` to disable. | `true`
 
 Here's an example non-default configuration:
@@ -51,6 +52,7 @@ Here's an example non-default configuration:
     flake-lock-path: ./nix/flake.lock
     check-owner: false
     ignore-missing-flake-lock: false
+    fail-mode: true
 ```
 
 [action]: https://github.com/features/actions
