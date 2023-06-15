@@ -1,4 +1,4 @@
-name: The Nix Flake Checker Action
+name: Nix Flake Checker
 description: |
   A GitHub Action from Determinate Systems that performs health checks on your `flake.lock` file
 branding:
