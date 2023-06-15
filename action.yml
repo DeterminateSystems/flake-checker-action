@@ -1,6 +1,6 @@
 name: Nix Flake Checker
 description: |
-  Check your `flake.lock` files for common problems, like outdated Nixpkgs releases.
+  Check your `flake.lock` files for common problems like outdated Nixpkgs releases.
 branding:
   icon: "box"
   color: "purple"
