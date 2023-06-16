@@ -43,37 +43,35 @@ runs:
     - name: Install the flake checker
       shell: bash
       run: |
-        (
-          set -eu
+        set -eu
 
-          curl --max-time 2 --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/flake-checker/stable/$RUNNER_ARCH-$RUNNER_OS > "$RUNNER_TEMP/flake-checker"
-          chmod +x "$RUNNER_TEMP/flake-checker"
+        curl --max-time 2 --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/flake-checker/stable/$RUNNER_ARCH-$RUNNER_OS > "$RUNNER_TEMP/flake-checker"
+        chmod +x "$RUNNER_TEMP/flake-checker"
 
-          export NIX_FLAKE_CHECKER_FLAKE_LOCK_PATH="${{ inputs.flake-lock-path }}"
+        export NIX_FLAKE_CHECKER_FLAKE_LOCK_PATH="${{ inputs.flake-lock-path }}"
 
-          if [ "${{ inputs.send-statistics }}" == "false" ]; then
-            export NIX_FLAKE_CHECKER_NO_TELEMETRY="false"
-          fi
+        if [ "${{ inputs.send-statistics }}" == "false" ]; then
+          export NIX_FLAKE_CHECKER_NO_TELEMETRY="false"
+        fi
 
-          if [ "${{ inputs.check-outdated }}" == "false" ]; then
-            export NIX_FLAKE_CHECKER_CHECK_OUTDATED="false"
-          fi
+        if [ "${{ inputs.check-outdated }}" == "false" ]; then
+          export NIX_FLAKE_CHECKER_CHECK_OUTDATED="false"
+        fi
 
-          if [ "${{ inputs.check-owner }}" == "false" ]; then
-            export NIX_FLAKE_CHECKER_CHECK_OWNER="false"
-          fi
+        if [ "${{ inputs.check-owner }}" == "false" ]; then
+          export NIX_FLAKE_CHECKER_CHECK_OWNER="false"
+        fi
 
-          if [ "${{ inputs.check-supported }}" == "false" ]; then
-            export NIX_FLAKE_CHECKER_CHECK_SUPPORTED="false"
-          fi
+        if [ "${{ inputs.check-supported }}" == "false" ]; then
+          export NIX_FLAKE_CHECKER_CHECK_SUPPORTED="false"
+        fi
 
-          if [ "${{ inputs.ignore-missing-flake-lock }}" == "false" ]; then
-            export NIX_FLAKE_CHECKER_IGNORE_MISSING_FLAKE_LOCK="false"
-          fi
+        if [ "${{ inputs.ignore-missing-flake-lock }}" == "false" ]; then
+          export NIX_FLAKE_CHECKER_IGNORE_MISSING_FLAKE_LOCK="false"
+        fi
 
-          if [ "${{ inputs.fail-mode }}" == "true" ]; then
-            export NIX_FLAKE_CHECKER_FAIL_MODE="true"
-          fi
+        if [ "${{ inputs.fail-mode }}" == "true" ]; then
+          export NIX_FLAKE_CHECKER_FAIL_MODE="true"
+        fi
 
-          "$RUNNER_TEMP/flake-checker"
-        ) || true
+        "$RUNNER_TEMP/flake-checker"
