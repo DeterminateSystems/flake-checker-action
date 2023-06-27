@@ -47,7 +47,6 @@ runs:
 
         curl \
           --connect-timeout 5 \
-          --max-time 15 \
           --retry 5 \
           --retry-connrefused \
           --proto '=https' \
