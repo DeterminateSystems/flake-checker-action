@@ -29,6 +29,12 @@ inputs:
       `flake-lock-path` parameter. If set to `false` (the default is `true`), the Action throws
       an error and the job fails if the lockfile is missing.
     default: true
+  nixpkgs-keys:
+    description: |
+      The names of the Nixpkgs inputs you want to check. By default the checker only checks the
+      `nixpkgs` but you can specify multiple names as a comma-separated list, such as
+      `nixpkgs,nixpkgs-macos,nixpkgs-unstable`.
+    default: nixpkgs
   fail-mode:
     description: Fail with an exit code of 1 if any issues are encountered.
     default: false
@@ -49,6 +55,8 @@ runs:
         chmod +x "$RUNNER_TEMP/flake-checker"
 
         export NIX_FLAKE_CHECKER_FLAKE_LOCK_PATH="${{ inputs.flake-lock-path }}"
+
+        export NIX_FLAKE_CHECKER_NIXPKGS_KEYS="${{ inputs.nixpkgs-keys }}"
 
         if [ "${{ inputs.send-statistics }}" == "false" ]; then
           export NIX_FLAKE_CHECKER_NO_TELEMETRY="false"
