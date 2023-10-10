@@ -1,7 +1,7 @@
 # This flake.nix is only here to provide a flake.lock to check in CI
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs.url = "https://flakehub.com/f/NixOS/nixpkgs/0.1.533189.tar.gz";
   };
 
   outputs = { self, nixpkgs, ... }:
