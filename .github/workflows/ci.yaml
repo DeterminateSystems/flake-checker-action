@@ -6,11 +6,29 @@ on:
     branches: [main]
 
 jobs:
+  check-dist-up-to-date:
+    name: Check the dist/ folder is up to date
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+      - run: nix develop --command pnpm install
+      - run: nix develop --command pnpm run format
+      - run: nix develop --command pnpm run lint
+      - run: nix develop --command pnpm run build
+      - run: nix develop --command pnpm run package
+      - run: git status --porcelain=v1
+      - run: test $(git status --porcelain=v1 2>/dev/null | wc -l) -eq 0
+
   run-x86_64-linux-clean:
     name: Run x86_64 Linux (clean)
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Check flake.lock
         uses: ./
 
@@ -18,7 +36,7 @@ jobs:
     name: Run x86_64 Linux (dirty)
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Check flake.lock
         uses: ./
         with:
@@ -28,7 +46,7 @@ jobs:
     name: Run x86_64 Darwin (clean)
     runs-on: macos-12
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Check flake.lock
         uses: ./
 
@@ -36,7 +54,7 @@ jobs:
     name: Run x86_64 Darwin (dirty)
     runs-on: macos-12
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Check flake.lock
         uses: ./
         with:
