@@ -6,6 +6,7 @@ class FlakeCheckerAction {
         this.idslib = new IdsToolbox({
             name: "flake-checker",
             fetchStyle: "gh-env-style",
+            diagnosticsUrl: new URL("https://install.determinate.systems/flake-checker/telemetry"),
         });
         this.flake_lock_path =
             action_input_string_or_null("flake-lock-path") || "flake.lock";
