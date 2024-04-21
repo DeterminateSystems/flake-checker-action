@@ -1,6 +1,6 @@
 import * as actionsCore from "@actions/core";
 import * as actionsExec from "@actions/exec";
-import { IdsToolbox } from "detsys-ts";
+import { ActionOptions, IdsToolbox, inputs } from "detsys-ts";
 
 class FlakeCheckerAction {
   idslib: IdsToolbox;
@@ -14,26 +14,30 @@ class FlakeCheckerAction {
   sendStatistics: boolean;
 
   constructor() {
-    this.idslib = new IdsToolbox({
+    const options: ActionOptions = {
       name: "flake-checker",
       fetchStyle: "gh-env-style",
       diagnosticsUrl: new URL(
         "https://install.determinate.systems/flake-checker/telemetry",
       ),
-    });
+      // We don't need Nix in this Action because we fetch a static binary using curl and run it
+      requireNix: "ignore",
+    };
+
+    this.idslib = new IdsToolbox(options);
 
     this.flakeLockPath =
-      actionInputStringOrNull("flake-lock-path") || "flake.lock";
-    this.nixpkgsKeys = actionInputStringOrNull("nixpkgs-keys") || "nixpkgs";
+      inputs.getStringOrNull("flake-lock-path") || "flake.lock";
+    this.nixpkgsKeys = inputs.getStringOrNull("nixpkgs-keys") || "nixpkgs";
 
-    this.checkOutdated = actionInputBool("check-outdated");
-    this.checkOwner = actionInputBool("check-owner");
-    this.checkSupported = actionInputBool("check-supported");
+    this.checkOutdated = inputs.getBool("check-outdated");
+    this.checkOwner = inputs.getBool("check-owner");
+    this.checkSupported = inputs.getBool("check-supported");
 
-    this.ignoreMissingFlakeLock = actionInputBool("ignore-missing-flake-lock");
+    this.ignoreMissingFlakeLock = inputs.getBool("ignore-missing-flake-lock");
 
-    this.failMode = actionInputBool("fail-mode");
-    this.sendStatistics = actionInputBool("send-statistics");
+    this.failMode = inputs.getBool("fail-mode");
+    this.sendStatistics = inputs.getBool("send-statistics");
   }
 
   private async executionEnvironment(): Promise<ExecuteEnvironment> {
@@ -107,19 +111,6 @@ type ExecuteEnvironment = {
   NIX_FLAKE_CHECKER_IGNORE_MISSING_FLAKE_LOCK?: string;
   NIX_FLAKE_CHECKER_FAIL_MODE?: string;
 };
-
-function actionInputStringOrNull(name: string): string | null {
-  const value = actionsCore.getInput(name);
-  if (value === "") {
-    return null;
-  } else {
-    return value;
-  }
-}
-
-function actionInputBool(name: string): boolean {
-  return actionsCore.getBooleanInput(name);
-}
 
 function main(): void {
   const checker = new FlakeCheckerAction();
