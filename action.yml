@@ -44,50 +44,5 @@ inputs:
       measure (and thereby improve) the effectiveness of the checker. Set to `false` to disable.
     default: true
 runs:
-  using: composite
-  steps:
-    - name: Install the flake checker
-      shell: bash
-      run: |
-        set -eu
-
-        curl \
-          --connect-timeout 5 \
-          --retry 5 \
-          --retry-connrefused \
-          --proto '=https' \
-          --tlsv1.2 \
-          -fsLS \
-          https://install.determinate.systems/flake-checker/stable/$RUNNER_ARCH-$RUNNER_OS > "$RUNNER_TEMP/flake-checker"
-
-        chmod +x "$RUNNER_TEMP/flake-checker"
-
-        export NIX_FLAKE_CHECKER_FLAKE_LOCK_PATH="${{ inputs.flake-lock-path }}"
-
-        export NIX_FLAKE_CHECKER_NIXPKGS_KEYS="${{ inputs.nixpkgs-keys }}"
-
-        if [ "${{ inputs.send-statistics }}" == "false" ]; then
-          export NIX_FLAKE_CHECKER_NO_TELEMETRY="false"
-        fi
-
-        if [ "${{ inputs.check-outdated }}" == "false" ]; then
-          export NIX_FLAKE_CHECKER_CHECK_OUTDATED="false"
-        fi
-
-        if [ "${{ inputs.check-owner }}" == "false" ]; then
-          export NIX_FLAKE_CHECKER_CHECK_OWNER="false"
-        fi
-
-        if [ "${{ inputs.check-supported }}" == "false" ]; then
-          export NIX_FLAKE_CHECKER_CHECK_SUPPORTED="false"
-        fi
-
-        if [ "${{ inputs.ignore-missing-flake-lock }}" == "false" ]; then
-          export NIX_FLAKE_CHECKER_IGNORE_MISSING_FLAKE_LOCK="false"
-        fi
-
-        if [ "${{ inputs.fail-mode }}" == "true" ]; then
-          export NIX_FLAKE_CHECKER_FAIL_MODE="true"
-        fi
-
-        "$RUNNER_TEMP/flake-checker"
+  using: "node20"
+  main: "dist/index.js"
