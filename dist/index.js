@@ -94272,6 +94272,7 @@ var FlakeCheckerAction = class {
       diagnosticsUrl: new URL(
         "https://install.determinate.systems/flake-checker/telemetry"
       ),
+      // We don't need Nix in this Action because we fetch a static binary using curl and run it
       requireNix: "ignore"
     };
     this.idslib = new IdsToolbox(options);
