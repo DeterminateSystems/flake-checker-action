@@ -2,11 +2,11 @@
   "name": "flake-checker-action",
   "version": "1.0.0",
   "description": "",
-  "main": "./dist/main.js",
-  "types": "./dist/main.d.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "type": "module",
   "scripts": {
-    "build": "tsc",
+    "build": "tsup",
     "format": "prettier --write .",
     "lint": "eslint src/**/*.ts",
     "package": "ncc build",
@@ -44,6 +44,7 @@
     "eslint-plugin-import": "^2.29.1",
     "eslint-plugin-prettier": "^5.1.3",
     "prettier": "^3.2.5",
+    "tsup": "^8.0.2",
     "typescript": "^5.4.5"
   }
 }
