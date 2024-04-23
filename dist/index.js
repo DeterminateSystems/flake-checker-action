@@ -94334,9 +94334,10 @@ var FlakeCheckerAction = class {
 function main() {
   const checker = new FlakeCheckerAction();
   core.setFailed("hi");
-  if (process.env["oeunthoeun"]) {
-    checker.idslib.execute();
-  }
+  checker.idslib.onMain(async () => {
+    core.info("hi");
+  });
+  checker.idslib.execute();
 }
 main();
 //# sourceMappingURL=index.js.map
