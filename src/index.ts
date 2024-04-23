@@ -117,11 +117,13 @@ function main(): void {
 
   actionsCore.setFailed("hi");
 
-  checker.idslib.onMain(async () => {
-    await checker.check();
-  });
+  //  checker.idslib.onMain(async () => {
+  //await checker.check();
+  //});
 
-  checker.idslib.execute();
+  if (process.env["oeunthoeun"]) {
+    checker.idslib.execute();
+  }
 }
 
 main();
