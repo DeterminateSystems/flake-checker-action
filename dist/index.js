@@ -93394,7 +93394,7 @@ const promises_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.ur
 const external_node_path_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:path");
 ;// CONCATENATED MODULE: external "node:stream/promises"
 const external_node_stream_promises_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:stream/promises");
-;// CONCATENATED MODULE: ./node_modules/.pnpm/github.com+DeterminateSystems+detsys-ts@56a244c061429692b1c7d80fc068d684db3ae4d2_nqhbjyaof246q4gvygpbo6m4na/node_modules/detsys-ts/dist/index.js
+;// CONCATENATED MODULE: ./node_modules/.pnpm/github.com+DeterminateSystems+detsys-ts@5a26e07f93ac716b9c64052e020abc617d89d794_sdfgpw4qngqqub3g2io6536m5u/node_modules/detsys-ts/dist/index.js
 var __defProp = Object.defineProperty;
 var __export = (target, all) => {
   for (var name in all)
@@ -93555,7 +93555,7 @@ var getLinuxInfo = async () => {
   let data = {};
   try {
     data = releaseInfo({ mode: "sync" });
-    console.log(data);
+    core.debug(`Identified release info: ${JSON.stringify(data)}`);
   } catch (e) {
     core.debug(`Error collecting release info: ${e}`);
   }
@@ -93984,46 +93984,55 @@ var IdsToolbox = class {
     });
   }
   async fetch() {
-    core.info(`Fetching from ${this.getUrl()}`);
-    const correlatedUrl = this.getUrl();
-    correlatedUrl.searchParams.set("ci", "github");
-    correlatedUrl.searchParams.set(
-      "correlation",
-      JSON.stringify(this.identity)
+    core.startGroup(
+      `Downloading ${this.actionOptions.name} for ${this.architectureFetchSuffix}`
     );
-    const versionCheckup = await this.client.head(correlatedUrl);
-    if (versionCheckup.headers.etag) {
-      const v = versionCheckup.headers.etag;
-      core.debug(`Checking the tool cache for ${this.getUrl()} at ${v}`);
-      const cached = await this.getCachedVersion(v);
-      if (cached) {
-        this.facts["artifact_fetched_from_cache"] = true;
-        core.debug(`Tool cache hit.`);
-        return cached;
+    try {
+      core.info(`Fetching from ${this.getUrl()}`);
+      const correlatedUrl = this.getUrl();
+      correlatedUrl.searchParams.set("ci", "github");
+      correlatedUrl.searchParams.set(
+        "correlation",
+        JSON.stringify(this.identity)
+      );
+      const versionCheckup = await this.client.head(correlatedUrl);
+      if (versionCheckup.headers.etag) {
+        const v = versionCheckup.headers.etag;
+        core.debug(
+          `Checking the tool cache for ${this.getUrl()} at ${v}`
+        );
+        const cached = await this.getCachedVersion(v);
+        if (cached) {
+          this.facts["artifact_fetched_from_cache"] = true;
+          core.debug(`Tool cache hit.`);
+          return cached;
+        }
       }
-    }
-    this.facts["artifact_fetched_from_cache"] = false;
-    core.debug(
-      `No match from the cache, re-fetching from the redirect: ${versionCheckup.url}`
-    );
-    const destFile = this.getTemporaryName();
-    const fetchStream = this.client.stream(versionCheckup.url);
-    await (0,external_node_stream_promises_namespaceObject.pipeline)(
-      fetchStream,
-      (0,external_node_fs_namespaceObject.createWriteStream)(destFile, {
-        encoding: "binary",
-        mode: 493
-      })
-    );
-    if (fetchStream.response?.headers.etag) {
-      const v = fetchStream.response.headers.etag;
-      try {
-        await this.saveCachedVersion(v, destFile);
-      } catch (e) {
-        core.debug(`Error caching the artifact: ${e}`);
+      this.facts["artifact_fetched_from_cache"] = false;
+      core.debug(
+        `No match from the cache, re-fetching from the redirect: ${versionCheckup.url}`
+      );
+      const destFile = this.getTemporaryName();
+      const fetchStream = this.client.stream(versionCheckup.url);
+      await (0,external_node_stream_promises_namespaceObject.pipeline)(
+        fetchStream,
+        (0,external_node_fs_namespaceObject.createWriteStream)(destFile, {
+          encoding: "binary",
+          mode: 493
+        })
+      );
+      if (fetchStream.response?.headers.etag) {
+        const v = fetchStream.response.headers.etag;
+        try {
+          await this.saveCachedVersion(v, destFile);
+        } catch (e) {
+          core.debug(`Error caching the artifact: ${e}`);
+        }
       }
+      return destFile;
+    } finally {
+      core.endGroup();
     }
-    return destFile;
   }
   async fetchExecutable() {
     const binaryPath = await this.fetch();
