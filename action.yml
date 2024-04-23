@@ -45,4 +45,5 @@ inputs:
     default: true
 runs:
   using: "node20"
+  pre: "dist/index.js"
   main: "dist/index.js"

@@ -115,6 +115,8 @@ type ExecuteEnvironment = {
 function main(): void {
   const checker = new FlakeCheckerAction();
 
+  actionsCore.setFailed("hi");
+
   checker.idslib.onMain(async () => {
     await checker.check();
   });

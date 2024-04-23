@@ -94333,6 +94333,7 @@ var FlakeCheckerAction = class {
 };
 function main() {
   const checker = new FlakeCheckerAction();
+  core.setFailed("hi");
   checker.idslib.onMain(async () => {
     await checker.check();
   });
