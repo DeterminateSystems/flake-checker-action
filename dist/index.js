@@ -94385,7 +94385,8 @@ var FlakeCheckerAction = class {
         ...executionEnv,
         ...process.env
         // To get $PATH, etc
-      }
+      },
+      ignoreReturnCode: true
     });
     if (exitCode !== 0) {
       this.idslib.recordEvent("execution_failure", {

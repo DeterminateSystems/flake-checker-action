@@ -86,6 +86,7 @@ class FlakeCheckerAction {
         ...executionEnv,
         ...process.env, // To get $PATH, etc
       },
+      ignoreReturnCode: true,
     });
 
     if (exitCode !== 0) {
