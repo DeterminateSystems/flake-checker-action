@@ -92,7 +92,7 @@ class FlakeCheckerAction {
       this.idslib.recordEvent("execution_failure", {
         exitCode,
       });
-      throw new Error(`Non-zero exit code of \`${exitCode}\` detected`);
+      actionsCore.setFailed(`Non-zero exit code of \`${exitCode}\`.`);
     }
 
     return exitCode;
