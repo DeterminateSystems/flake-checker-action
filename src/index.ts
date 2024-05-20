@@ -26,9 +26,8 @@ class FlakeCheckerAction {
 
     this.idslib = new IdsToolbox(options);
 
-    this.flakeLockPath =
-      inputs.getStringOrNull("flake-lock-path") || "flake.lock";
-    this.nixpkgsKeys = inputs.getStringOrNull("nixpkgs-keys") || "nixpkgs";
+    this.flakeLockPath = inputs.getString("flake-lock-path");
+    this.nixpkgsKeys = inputs.getString("nixpkgs-keys");
 
     this.checkOutdated = inputs.getBool("check-outdated");
     this.checkOwner = inputs.getBool("check-owner");
@@ -74,7 +73,12 @@ class FlakeCheckerAction {
   }
 
   async check(): Promise<number> {
-    const binaryPath = await this.idslib.fetchExecutable();
+    const sourceBinary = inputs.getStringOrNull("source-binary");
+
+    const binaryPath =
+      sourceBinary !== null && sourceBinary !== ""
+        ? sourceBinary
+        : await this.idslib.fetchExecutable();
 
     const executionEnv = await this.executionEnvironment();
     actionsCore.debug(
