@@ -6,8 +6,8 @@ on:
     branches: [main]
 
 jobs:
-  check-dist-up-to-date:
-    name: Check the dist/ folder is up to date
+  build-check-typescript:
+    name: Build and check the TypeScript Action
     runs-on: ubuntu-22.04
     permissions:
       contents: read
@@ -26,6 +26,7 @@ jobs:
 
   run-x86_64-linux-clean:
     name: Run x86_64 Linux (clean)
+    needs: build-check-typescript
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -34,6 +35,7 @@ jobs:
 
   run-x86_64-linux-dirty:
     name: Run x86_64 Linux (dirty)
+    needs: build-check-typescript
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -44,6 +46,7 @@ jobs:
 
   run-x86_64-darwin-clean:
     name: Run x86_64 Darwin (clean)
+    needs: build-check-typescript
     runs-on: macos-12
     steps:
       - uses: actions/checkout@v4
@@ -52,6 +55,7 @@ jobs:
 
   run-x86_64-darwin-dirty:
     name: Run x86_64 Darwin (dirty)
+    needs: build-check-typescript
     runs-on: macos-12
     steps:
       - uses: actions/checkout@v4
