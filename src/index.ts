@@ -2,6 +2,8 @@ import * as actionsCore from "@actions/core";
 import * as actionsExec from "@actions/exec";
 import { ActionOptions, IdsToolbox, inputs } from "detsys-ts";
 
+const EVENT_EXECUTION_FAILURE = "execution_failure";
+
 class FlakeCheckerAction {
   idslib: IdsToolbox;
   flakeLockPath: string;
@@ -28,13 +30,10 @@ class FlakeCheckerAction {
 
     this.flakeLockPath = inputs.getString("flake-lock-path");
     this.nixpkgsKeys = inputs.getString("nixpkgs-keys");
-
     this.checkOutdated = inputs.getBool("check-outdated");
     this.checkOwner = inputs.getBool("check-owner");
     this.checkSupported = inputs.getBool("check-supported");
-
     this.ignoreMissingFlakeLock = inputs.getBool("ignore-missing-flake-lock");
-
     this.failMode = inputs.getBool("fail-mode");
     this.sendStatistics = inputs.getBool("send-statistics");
   }
@@ -94,7 +93,7 @@ class FlakeCheckerAction {
     });
 
     if (exitCode !== 0) {
-      this.idslib.recordEvent("execution_failure", {
+      this.idslib.recordEvent(EVENT_EXECUTION_FAILURE, {
         exitCode,
       });
       actionsCore.setFailed(`Non-zero exit code of \`${exitCode}\`.`);

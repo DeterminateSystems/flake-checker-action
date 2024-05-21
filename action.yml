@@ -44,7 +44,8 @@ inputs:
       measure (and thereby improve) the effectiveness of the checker. Set to `false` to disable.
     default: true
   source-binary:
-    description: Run a version of flake-checker from somewhere already on disk. Use only in this repo.
+    description: |
+      Run a version of flake-checker from somewhere already on disk. Intended only for testing the Action.
     required: false
 runs:
   using: "node20"

@@ -94691,6 +94691,7 @@ function mungeDiagnosticEndpoint(inputUrl) {
 
 
 
+var EVENT_EXECUTION_FAILURE = "execution_failure";
 var FlakeCheckerAction = class {
   constructor() {
     const options = {
@@ -94752,7 +94753,7 @@ var FlakeCheckerAction = class {
       ignoreReturnCode: true
     });
     if (exitCode !== 0) {
-      this.idslib.recordEvent("execution_failure", {
+      this.idslib.recordEvent(EVENT_EXECUTION_FAILURE, {
         exitCode
       });
       core.setFailed(`Non-zero exit code of \`${exitCode}\`.`);
