@@ -68,8 +68,8 @@ class FlakeCheckerAction extends DetSysAction {
     return exitCode;
   }
 
-  private async executionEnvironment(): Promise<ExecuteEnvironment> {
-    const executionEnv: ExecuteEnvironment = {};
+  private async executionEnvironment(): Promise<ExecutionEnvironment> {
+    const executionEnv: ExecutionEnvironment = {};
 
     executionEnv.NIX_FLAKE_CHECKER_FLAKE_LOCK_PATH = this.flakeLockPath;
     executionEnv.NIX_FLAKE_CHECKER_NIXPKGS_KEYS = this.nixpkgsKeys;
@@ -102,7 +102,7 @@ class FlakeCheckerAction extends DetSysAction {
   }
 }
 
-type ExecuteEnvironment = {
+type ExecutionEnvironment = {
   // All env vars are strings, no fanciness here.
   RUST_BACKTRACE?: string;
   NIX_FLAKE_CHECKER_FLAKE_LOCK_PATH?: string;
