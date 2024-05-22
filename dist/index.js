@@ -94807,37 +94807,28 @@ var FlakeCheckerAction = class extends DetSysAction {
     return executionEnv;
   }
   async checkFlake() {
-    try {
-      const binaryPath = await this.fetchExecutable();
-      const executionEnv = await this.executionEnvironment();
-      core.debug(
-        `Execution environment: ${JSON.stringify(executionEnv, null, 4)}`
-      );
-      const exitCode = await exec.exec(binaryPath, [], {
-        env: {
-          ...executionEnv,
-          ...process.env
-          // To get $PATH, etc
-        },
-        ignoreReturnCode: true
+    const binaryPath = await this.fetchExecutable();
+    const executionEnv = await this.executionEnvironment();
+    core.debug(
+      `Execution environment: ${JSON.stringify(executionEnv, null, 4)}`
+    );
+    const exitCode = await exec.exec(binaryPath, [], {
+      env: {
+        ...executionEnv,
+        ...process.env
+        // To get $PATH, etc
+      },
+      ignoreReturnCode: true
+    });
+    if (exitCode !== 0) {
+      this.recordEvent("execution_failure", {
+        exitCode
       });
-      if (exitCode !== 0) {
-        this.recordEvent("execution_failure", {
-          exitCode
-        });
-        core.setFailed(`Non-zero exit code of \`${exitCode}\`.`);
-      }
-      return exitCode;
-    } catch (e) {
-      const msg = dist_stringifyError(e);
-      this.failOnError(msg);
-      throw new Error(dist_stringifyError(e));
+      core.setFailed(`Non-zero exit code of \`${exitCode}\`.`);
     }
+    return exitCode;
   }
 };
-function dist_stringifyError(error) {
-  return error instanceof Error || typeof error == "string" ? error.toString() : JSON.stringify(error);
-}
 function main() {
   new FlakeCheckerAction().execute();
 }
