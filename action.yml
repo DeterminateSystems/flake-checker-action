@@ -47,6 +47,9 @@ inputs:
     description: |
       Run a version of flake-checker from somewhere already on disk. Intended only for testing the Action.
     required: false
+  _internal-strict-mode:
+    description: Whether to fail when any errors are thrown. Used only to test the Action; do not set this in your own workflows.
+    default: false
 runs:
   using: "node20"
   main: "dist/index.js"

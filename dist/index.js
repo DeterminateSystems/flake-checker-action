@@ -39513,7 +39513,7 @@ module.exports =
 {
   parallel      : __nccwpck_require__(644),
   serial        : __nccwpck_require__(4501),
-  serialOrdered : __nccwpck_require__(2362)
+  serialOrdered : __nccwpck_require__(3958)
 };
 
 
@@ -39844,7 +39844,7 @@ function parallel(list, iterator, callback)
 /***/ 4501:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
-var serialOrdered = __nccwpck_require__(2362);
+var serialOrdered = __nccwpck_require__(3958);
 
 // Public API
 module.exports = serial;
@@ -39865,7 +39865,7 @@ function serial(list, iterator, callback)
 
 /***/ }),
 
-/***/ 2362:
+/***/ 3958:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 var iterate    = __nccwpck_require__(5748)
@@ -93700,6 +93700,8 @@ const got = source_create(defaults);
 
 
 
+;// CONCATENATED MODULE: external "node:child_process"
+const external_node_child_process_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:child_process");
 ;// CONCATENATED MODULE: external "node:fs/promises"
 const promises_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:fs/promises");
 ;// CONCATENATED MODULE: external "node:path"
@@ -93708,7 +93710,7 @@ const external_node_path_namespaceObject = __WEBPACK_EXTERNAL_createRequire(impo
 const external_node_stream_promises_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:stream/promises");
 ;// CONCATENATED MODULE: external "node:zlib"
 const external_node_zlib_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:zlib");
-;// CONCATENATED MODULE: ./node_modules/.pnpm/github.com+DeterminateSystems+detsys-ts@97979f48241e807d76bd9b8cbfc69a245f04894b_pj2fuot4efihj4fvjjgwov2aue/node_modules/detsys-ts/dist/index.js
+;// CONCATENATED MODULE: ./node_modules/.pnpm/github.com+DeterminateSystems+detsys-ts@ed02129aed8e4d6402d920152652877189bece70_3whmnlhrx56zhgtsjnkrhnutfu/node_modules/detsys-ts/dist/index.js
 var __defProp = Object.defineProperty;
 var __export = (target, all) => {
   for (var name in all)
@@ -94012,45 +94014,6 @@ function hashEnvironmentVariables(prefix, variables) {
   return `${prefix}-${hash.digest("hex")}`;
 }
 
-// src/platform.ts
-var platform_exports = {};
-__export(platform_exports, {
-  getArchOs: () => getArchOs,
-  getNixPlatform: () => getNixPlatform
-});
-
-function getArchOs() {
-  const envArch = process.env.RUNNER_ARCH;
-  const envOs = process.env.RUNNER_OS;
-  if (envArch && envOs) {
-    return `${envArch}-${envOs}`;
-  } else {
-    core.error(
-      `Can't identify the platform: RUNNER_ARCH or RUNNER_OS undefined (${envArch}-${envOs})`
-    );
-    throw new Error("RUNNER_ARCH and/or RUNNER_OS is not defined");
-  }
-}
-function getNixPlatform(archOs) {
-  const archOsMap = /* @__PURE__ */ new Map([
-    ["X64-macOS", "x86_64-darwin"],
-    ["ARM64-macOS", "aarch64-darwin"],
-    ["X64-Linux", "x86_64-linux"],
-    ["ARM64-Linux", "aarch64-linux"]
-  ]);
-  const mappedTo = archOsMap.get(archOs);
-  if (mappedTo) {
-    return mappedTo;
-  } else {
-    core.error(
-      `ArchOs (${archOs}) doesn't map to a supported Nix platform.`
-    );
-    throw new Error(
-      `Cannot convert ArchOs (${archOs}) to a supported Nix platform.`
-    );
-  }
-}
-
 // src/inputs.ts
 var inputs_exports = {};
 __export(inputs_exports, {
@@ -94115,6 +94078,45 @@ var getStringOrUndefined = (name) => {
   }
 };
 
+// src/platform.ts
+var platform_exports = {};
+__export(platform_exports, {
+  getArchOs: () => getArchOs,
+  getNixPlatform: () => getNixPlatform
+});
+
+function getArchOs() {
+  const envArch = process.env.RUNNER_ARCH;
+  const envOs = process.env.RUNNER_OS;
+  if (envArch && envOs) {
+    return `${envArch}-${envOs}`;
+  } else {
+    core.error(
+      `Can't identify the platform: RUNNER_ARCH or RUNNER_OS undefined (${envArch}-${envOs})`
+    );
+    throw new Error("RUNNER_ARCH and/or RUNNER_OS is not defined");
+  }
+}
+function getNixPlatform(archOs) {
+  const archOsMap = /* @__PURE__ */ new Map([
+    ["X64-macOS", "x86_64-darwin"],
+    ["ARM64-macOS", "aarch64-darwin"],
+    ["X64-Linux", "x86_64-linux"],
+    ["ARM64-Linux", "aarch64-linux"]
+  ]);
+  const mappedTo = archOsMap.get(archOs);
+  if (mappedTo) {
+    return mappedTo;
+  } else {
+    core.error(
+      `ArchOs (${archOs}) doesn't map to a supported Nix platform.`
+    );
+    throw new Error(
+      `Cannot convert ArchOs (${archOs}) to a supported Nix platform.`
+    );
+  }
+}
+
 // src/sourcedef.ts
 
 function constructSourceParameters(legacyPrefix) {
@@ -94161,27 +94163,44 @@ function noisilyGetInput(suffix, legacyPrefix) {
 
 
 
+
+
 var DEFAULT_IDS_HOST = "https://install.determinate.systems";
 var IDS_HOST = process.env["IDS_HOST"] ?? DEFAULT_IDS_HOST;
 var EVENT_EXCEPTION = "exception";
 var EVENT_ARTIFACT_CACHE_HIT = "artifact_cache_hit";
 var EVENT_ARTIFACT_CACHE_MISS = "artifact_cache_miss";
 var EVENT_ARTIFACT_CACHE_PERSIST = "artifact_cache_persist";
+var EVENT_PREFLIGHT_REQUIRE_NIX_DENIED = "preflight-require-nix-denied";
 var FACT_ENDED_WITH_EXCEPTION = "ended_with_exception";
 var FACT_FINAL_EXCEPTION = "final_exception";
+var FACT_OS = "$os";
+var FACT_OS_VERSION = "$os_version";
 var FACT_SOURCE_URL = "source_url";
 var FACT_SOURCE_URL_ETAG = "source_url_etag";
+var FACT_NIX_LOCATION = "nix_location";
 var FACT_NIX_STORE_TRUST = "nix_store_trusted";
 var FACT_NIX_STORE_VERSION = "nix_store_version";
 var FACT_NIX_STORE_CHECK_METHOD = "nix_store_check_method";
 var FACT_NIX_STORE_CHECK_ERROR = "nix_store_check_error";
-var IdsToolbox = class {
+var STATE_KEY_EXECUTION_PHASE = "detsys_action_execution_phase";
+var STATE_KEY_NIX_NOT_FOUND = "detsys_action_nix_not_found";
+var STATE_NOT_FOUND = "not-found";
+var DetSysAction = class {
+  determineExecutionPhase() {
+    const currentPhase = core.getState(STATE_KEY_EXECUTION_PHASE);
+    if (currentPhase === "") {
+      core.saveState(STATE_KEY_EXECUTION_PHASE, "post");
+      return "main";
+    } else {
+      return "post";
+    }
+  }
   constructor(actionOptions) {
     this.actionOptions = makeOptionsConfident(actionOptions);
-    this.hookMain = void 0;
-    this.hookPost = void 0;
     this.exceptionAttachments = /* @__PURE__ */ new Map();
     this.nixStoreTrust = "unknown";
+    this.strictMode = getBool("_internal-strict-mode");
     this.events = [];
     this.client = got_dist_source.extend({
       retry: {
@@ -94225,25 +94244,19 @@ var IdsToolbox = class {
     {
       getDetails().then((details) => {
         if (details.name !== "unknown") {
-          this.addFact("$os", details.name);
+          this.addFact(FACT_OS, details.name);
         }
         if (details.version !== "unknown") {
-          this.addFact("$os_version", details.version);
+          this.addFact(FACT_OS_VERSION, details.version);
         }
       }).catch((e) => {
-        core.debug(`Failure getting platform details: ${e}`);
+        core.debug(
+          `Failure getting platform details: ${stringifyError(e)}`
+        );
       });
     }
-    {
-      const phase = core.getState("idstoolbox_execution_phase");
-      if (phase === "") {
-        core.saveState("idstoolbox_execution_phase", "post");
-        this.executionPhase = "main";
-      } else {
-        this.executionPhase = "post";
-      }
-      this.facts.execution_phase = this.executionPhase;
-    }
+    this.executionPhase = this.determineExecutionPhase();
+    this.facts.execution_phase = this.executionPhase;
     if (this.actionOptions.fetchStyle === "gh-env-style") {
       this.architectureFetchSuffix = this.archOs;
     } else if (this.actionOptions.fetchStyle === "nix-style") {
@@ -94271,20 +94284,31 @@ var IdsToolbox = class {
   stapleFile(name, location) {
     this.exceptionAttachments.set(name, location);
   }
-  onMain(callback) {
-    this.hookMain = callback;
+  setExecutionPhase() {
+    const phase = core.getState(STATE_KEY_EXECUTION_PHASE);
+    if (phase === "") {
+      core.saveState(STATE_KEY_EXECUTION_PHASE, "post");
+      this.executionPhase = "main";
+    } else {
+      this.executionPhase = "post";
+    }
+    this.facts.execution_phase = this.executionPhase;
   }
-  onPost(callback) {
-    this.hookPost = callback;
-  }
+  /**
+   * Execute the Action as defined.
+   */
   execute() {
     this.executeAsync().catch((error2) => {
       console.log(error2);
       process.exitCode = 1;
     });
   }
-  stringifyError(error2) {
-    return error2 instanceof Error || typeof error2 == "string" ? error2.toString() : JSON.stringify(error2);
+  // Whether the
+  get isMain() {
+    return this.executionPhase === "main";
+  }
+  get isPost() {
+    return this.executionPhase === "post";
   }
   async executeAsync() {
     try {
@@ -94292,41 +94316,41 @@ var IdsToolbox = class {
         this.getCorrelationHashes()
       );
       if (!await this.preflightRequireNix()) {
-        this.recordEvent("preflight-require-nix-denied");
+        this.recordEvent(EVENT_PREFLIGHT_REQUIRE_NIX_DENIED);
         return;
       } else {
         await this.preflightNixStoreInfo();
         this.addFact(FACT_NIX_STORE_TRUST, this.nixStoreTrust);
       }
-      if (this.executionPhase === "main" && this.hookMain) {
-        await this.hookMain();
-      } else if (this.executionPhase === "post" && this.hookPost) {
-        await this.hookPost();
+      if (this.isMain) {
+        await this.main();
+      } else if (this.isPost) {
+        await this.post();
       }
       this.addFact(FACT_ENDED_WITH_EXCEPTION, false);
-    } catch (error2) {
+    } catch (e) {
       this.addFact(FACT_ENDED_WITH_EXCEPTION, true);
-      const reportable = this.stringifyError(error2);
+      const reportable = stringifyError(e);
       this.addFact(FACT_FINAL_EXCEPTION, reportable);
-      if (this.executionPhase === "post") {
+      if (this.isPost) {
         core.warning(reportable);
       } else {
         core.setFailed(reportable);
       }
-      const do_gzip = (0,external_node_util_.promisify)(external_node_zlib_namespaceObject.gzip);
+      const doGzip = (0,external_node_util_.promisify)(external_node_zlib_namespaceObject.gzip);
       const exceptionContext = /* @__PURE__ */ new Map();
       for (const [attachmentLabel, filePath] of this.exceptionAttachments) {
         try {
           const logText = (0,external_node_fs_namespaceObject.readFileSync)(filePath);
-          const buf = await do_gzip(logText);
+          const buf = await doGzip(logText);
           exceptionContext.set(
             `staple_value_${attachmentLabel}`,
             buf.toString("base64")
           );
-        } catch (e) {
+        } catch (innerError) {
           exceptionContext.set(
             `staple_failure_${attachmentLabel}`,
-            this.stringifyError(e)
+            stringifyError(innerError)
           );
         }
       }
@@ -94357,7 +94381,24 @@ var IdsToolbox = class {
       uuid: (0,external_node_crypto_namespaceObject.randomUUID)()
     });
   }
-  async fetch() {
+  /**
+   * Fetches a file in `.xz` format, imports its contents into the Nix store,
+   * and returns the path of the executable at `/nix/store/STORE_PATH/bin/${bin}`.
+   */
+  async unpackClosure(bin) {
+    const artifact = this.fetchArtifact();
+    const { stdout } = await (0,external_node_util_.promisify)(external_node_child_process_namespaceObject.exec)(
+      `cat "${artifact}" | xz -d | nix-store --import`
+    );
+    const paths = stdout.split(external_node_os_.EOL);
+    const lastPath = paths.at(-2);
+    return `${lastPath}/bin/${bin}`;
+  }
+  /**
+   * Fetch an artifact, such as a tarball, from the URL determined by the `source-*`
+   * inputs and other factors.
+   */
+  async fetchArtifact() {
     core.startGroup(
       `Downloading ${this.actionOptions.name} for ${this.architectureFetchSuffix}`
     );
@@ -94401,7 +94442,7 @@ var IdsToolbox = class {
         try {
           await this.saveCachedVersion(v, destFile);
         } catch (e) {
-          core.debug(`Error caching the artifact: ${e}`);
+          core.debug(`Error caching the artifact: ${stringifyError(e)}`);
         }
       }
       return destFile;
@@ -94409,10 +94450,23 @@ var IdsToolbox = class {
       core.endGroup();
     }
   }
+  /**
+   * Fetches the executable at the URL determined by the `source-*` inputs and
+   * other facts, `chmod`s it, and returns the path to the executable on disk.
+   */
   async fetchExecutable() {
-    const binaryPath = await this.fetch();
+    const binaryPath = await this.fetchArtifact();
     await (0,promises_namespaceObject.chmod)(binaryPath, promises_namespaceObject.constants.S_IXUSR | promises_namespaceObject.constants.S_IXGRP);
     return binaryPath;
+  }
+  /**
+   * A helper function for failing on error only if strict mode is enabled.
+   * This is intended only for CI environments testing Actions themselves.
+   */
+  failOnError(msg) {
+    if (this.strictMode) {
+      core.setFailed(`strict mode failure: ${msg}`);
+    }
   }
   async complete() {
     this.recordEvent(`complete_${this.executionPhase}`);
@@ -94507,29 +94561,33 @@ var IdsToolbox = class {
         core.debug(`Nix not at ${candidateNix}`);
       }
     }
-    this.addFact("nix_location", nixLocation || "");
+    this.addFact(FACT_NIX_LOCATION, nixLocation || "");
     if (this.actionOptions.requireNix === "ignore") {
       return true;
     }
-    const currentNotFoundState = core.getState(
-      "idstoolbox_nix_not_found"
-    );
-    if (currentNotFoundState === "not-found") {
+    const currentNotFoundState = core.getState(STATE_KEY_NIX_NOT_FOUND);
+    if (currentNotFoundState === STATE_NOT_FOUND) {
       return false;
     }
     if (nixLocation !== void 0) {
       return true;
     }
-    core.saveState("idstoolbox_nix_not_found", "not-found");
+    core.saveState(STATE_KEY_NIX_NOT_FOUND, STATE_NOT_FOUND);
     switch (this.actionOptions.requireNix) {
       case "fail":
         core.setFailed(
-          "This action can only be used when Nix is installed. Add `- uses: DeterminateSystems/nix-installer-action@main` earlier in your workflow."
+          [
+            "This action can only be used when Nix is installed.",
+            "Add `- uses: DeterminateSystems/nix-installer-action@main` earlier in your workflow."
+          ].join(" ")
         );
         break;
       case "warn":
         core.warning(
-          "This action is in no-op mode because Nix is not installed. Add `- uses: DeterminateSystems/nix-installer-action@main` earlier in your workflow."
+          [
+            "This action is in no-op mode because Nix is not installed.",
+            "Add `- uses: DeterminateSystems/nix-installer-action@main` earlier in your workflow."
+          ].join(" ")
         );
         break;
     }
@@ -94572,11 +94630,11 @@ var IdsToolbox = class {
       }
       this.addFact(FACT_NIX_STORE_VERSION, JSON.stringify(parsed.version));
     } catch (e) {
-      this.addFact(FACT_NIX_STORE_CHECK_ERROR, this.stringifyError(e));
+      this.addFact(FACT_NIX_STORE_CHECK_ERROR, stringifyError(e));
     }
   }
   async submitEvents() {
-    if (!this.actionOptions.diagnosticsUrl) {
+    if (this.actionOptions.diagnosticsUrl === void 0) {
       core.debug(
         "Diagnostics are disabled. Not sending the following events:"
       );
@@ -94592,8 +94650,10 @@ var IdsToolbox = class {
       await this.client.post(this.actionOptions.diagnosticsUrl, {
         json: batch
       });
-    } catch (error2) {
-      core.debug(`Error submitting diagnostics event: ${error2}`);
+    } catch (e) {
+      core.debug(
+        `Error submitting diagnostics event: ${stringifyError(e)}`
+      );
     }
     this.events = [];
   }
@@ -94602,6 +94662,9 @@ var IdsToolbox = class {
     return external_node_path_namespaceObject.join(_tmpdir, `${this.actionOptions.name}-${(0,external_node_crypto_namespaceObject.randomUUID)()}`);
   }
 };
+function stringifyError(error2) {
+  return error2 instanceof Error || typeof error2 == "string" ? error2.toString() : JSON.stringify(error2);
+}
 function makeOptionsConfident(actionOptions) {
   const idsProjectName = actionOptions.idsProjectName ?? actionOptions.name;
   const finalOpts = {
@@ -94637,7 +94700,7 @@ function determineDiagnosticsUrl(idsProjectName, urlOption) {
         return mungeDiagnosticEndpoint(new URL(providedDiagnosticEndpoint));
       } catch (e) {
         core.info(
-          `User-provided diagnostic endpoint ignored: not a valid URL: ${e}`
+          `User-provided diagnostic endpoint ignored: not a valid URL: ${stringifyError(e)}`
         );
       }
     }
@@ -94649,7 +94712,7 @@ function determineDiagnosticsUrl(idsProjectName, urlOption) {
     return diagnosticUrl;
   } catch (e) {
     core.info(
-      `Generated diagnostic endpoint ignored: not a valid URL: ${e}`
+      `Generated diagnostic endpoint ignored: not a valid URL: ${stringifyError(e)}`
     );
   }
   return void 0;
@@ -94670,7 +94733,9 @@ function mungeDiagnosticEndpoint(inputUrl) {
     inputUrl.password = currentIdsHost.password;
     return inputUrl;
   } catch (e) {
-    core.info(`Default or overridden IDS host isn't a valid URL: ${e}`);
+    core.info(
+      `Default or overridden IDS host isn't a valid URL: ${stringifyError(e)}`
+    );
   }
   return inputUrl;
 }
@@ -94692,9 +94757,9 @@ function mungeDiagnosticEndpoint(inputUrl) {
 
 
 var EVENT_EXECUTION_FAILURE = "execution_failure";
-var FlakeCheckerAction = class {
+var FlakeCheckerAction = class extends DetSysAction {
   constructor() {
-    const options = {
+    super({
       name: "flake-checker",
       fetchStyle: "gh-env-style",
       diagnosticsUrl: new URL(
@@ -94702,8 +94767,7 @@ var FlakeCheckerAction = class {
       ),
       // We don't need Nix in this Action because we fetch a static binary using curl and run it
       requireNix: "ignore"
-    };
-    this.idslib = new IdsToolbox(options);
+    });
     this.flakeLockPath = inputs_exports.getString("flake-lock-path");
     this.nixpkgsKeys = inputs_exports.getString("nixpkgs-keys");
     this.checkOutdated = inputs_exports.getBool("check-outdated");
@@ -94712,6 +94776,34 @@ var FlakeCheckerAction = class {
     this.ignoreMissingFlakeLock = inputs_exports.getBool("ignore-missing-flake-lock");
     this.failMode = inputs_exports.getBool("fail-mode");
     this.sendStatistics = inputs_exports.getBool("send-statistics");
+  }
+  async main() {
+    await this.checkFlake();
+  }
+  // No post step
+  async post() {
+  }
+  async checkFlake() {
+    const binaryPath = await this.fetchExecutable();
+    const executionEnv = await this.executionEnvironment();
+    core.debug(
+      `Execution environment: ${JSON.stringify(executionEnv, null, 4)}`
+    );
+    const exitCode = await exec.exec(binaryPath, [], {
+      env: {
+        ...executionEnv,
+        ...process.env
+        // To get $PATH, etc
+      },
+      ignoreReturnCode: true
+    });
+    if (exitCode !== 0) {
+      this.recordEvent(EVENT_EXECUTION_FAILURE, {
+        exitCode
+      });
+      core.setFailed(`Non-zero exit code of \`${exitCode}\`.`);
+    }
+    return exitCode;
   }
   async executionEnvironment() {
     const executionEnv = {};
@@ -94737,36 +94829,9 @@ var FlakeCheckerAction = class {
     }
     return executionEnv;
   }
-  async check() {
-    const sourceBinary = inputs_exports.getStringOrNull("source-binary");
-    const binaryPath = sourceBinary !== null && sourceBinary !== "" ? sourceBinary : await this.idslib.fetchExecutable();
-    const executionEnv = await this.executionEnvironment();
-    core.debug(
-      `Execution environment: ${JSON.stringify(executionEnv, null, 4)}`
-    );
-    const exitCode = await exec.exec(binaryPath, [], {
-      env: {
-        ...executionEnv,
-        ...process.env
-        // To get $PATH, etc
-      },
-      ignoreReturnCode: true
-    });
-    if (exitCode !== 0) {
-      this.idslib.recordEvent(EVENT_EXECUTION_FAILURE, {
-        exitCode
-      });
-      core.setFailed(`Non-zero exit code of \`${exitCode}\`.`);
-    }
-    return exitCode;
-  }
 };
 function main() {
-  const checker = new FlakeCheckerAction();
-  checker.idslib.onMain(async () => {
-    await checker.check();
-  });
-  checker.idslib.execute();
+  new FlakeCheckerAction().execute();
 }
 main();
 //# sourceMappingURL=index.js.map
