@@ -94756,6 +94756,7 @@ function mungeDiagnosticEndpoint(inputUrl) {
 
 
 
+var EVENT_EXECUTION_FAILURE = "execution_failure";
 var FlakeCheckerAction = class extends DetSysAction {
   constructor() {
     super({
@@ -94782,6 +94783,28 @@ var FlakeCheckerAction = class extends DetSysAction {
   // No post step
   async post() {
   }
+  async checkFlake() {
+    const binaryPath = await this.fetchExecutable();
+    const executionEnv = await this.executionEnvironment();
+    core.debug(
+      `Execution environment: ${JSON.stringify(executionEnv, null, 4)}`
+    );
+    const exitCode = await exec.exec(binaryPath, [], {
+      env: {
+        ...executionEnv,
+        ...process.env
+        // To get $PATH, etc
+      },
+      ignoreReturnCode: true
+    });
+    if (exitCode !== 0) {
+      this.recordEvent(EVENT_EXECUTION_FAILURE, {
+        exitCode
+      });
+      core.setFailed(`Non-zero exit code of \`${exitCode}\`.`);
+    }
+    return exitCode;
+  }
   async executionEnvironment() {
     const executionEnv = {};
     executionEnv.NIX_FLAKE_CHECKER_FLAKE_LOCK_PATH = this.flakeLockPath;
@@ -94805,28 +94828,6 @@ var FlakeCheckerAction = class extends DetSysAction {
       executionEnv.NIX_FLAKE_CHECKER_FAIL_MODE = "true";
     }
     return executionEnv;
-  }
-  async checkFlake() {
-    const binaryPath = await this.fetchExecutable();
-    const executionEnv = await this.executionEnvironment();
-    core.debug(
-      `Execution environment: ${JSON.stringify(executionEnv, null, 4)}`
-    );
-    const exitCode = await exec.exec(binaryPath, [], {
-      env: {
-        ...executionEnv,
-        ...process.env
-        // To get $PATH, etc
-      },
-      ignoreReturnCode: true
-    });
-    if (exitCode !== 0) {
-      this.recordEvent("execution_failure", {
-        exitCode
-      });
-      core.setFailed(`Non-zero exit code of \`${exitCode}\`.`);
-    }
-    return exitCode;
   }
 };
 function main() {

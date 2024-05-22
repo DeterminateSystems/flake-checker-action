@@ -2,6 +2,8 @@ import * as actionsCore from "@actions/core";
 import * as actionsExec from "@actions/exec";
 import { DetSysAction, inputs } from "detsys-ts";
 
+const EVENT_EXECUTION_FAILURE = "execution_failure";
+
 class FlakeCheckerAction extends DetSysAction {
   flakeLockPath: string;
   nixpkgsKeys: string;
@@ -40,6 +42,32 @@ class FlakeCheckerAction extends DetSysAction {
   // No post step
   async post(): Promise<void> {}
 
+  private async checkFlake(): Promise<number> {
+    const binaryPath = await this.fetchExecutable();
+    const executionEnv = await this.executionEnvironment();
+
+    actionsCore.debug(
+      `Execution environment: ${JSON.stringify(executionEnv, null, 4)}`,
+    );
+
+    const exitCode = await actionsExec.exec(binaryPath, [], {
+      env: {
+        ...executionEnv,
+        ...process.env, // To get $PATH, etc
+      },
+      ignoreReturnCode: true,
+    });
+
+    if (exitCode !== 0) {
+      this.recordEvent(EVENT_EXECUTION_FAILURE, {
+        exitCode,
+      });
+      actionsCore.setFailed(`Non-zero exit code of \`${exitCode}\`.`);
+    }
+
+    return exitCode;
+  }
+
   private async executionEnvironment(): Promise<ExecuteEnvironment> {
     const executionEnv: ExecuteEnvironment = {};
 
@@ -71,33 +99,6 @@ class FlakeCheckerAction extends DetSysAction {
     }
 
     return executionEnv;
-  }
-
-  async checkFlake(): Promise<number> {
-    const binaryPath = await this.fetchExecutable();
-
-    const executionEnv = await this.executionEnvironment();
-
-    actionsCore.debug(
-      `Execution environment: ${JSON.stringify(executionEnv, null, 4)}`,
-    );
-
-    const exitCode = await actionsExec.exec(binaryPath, [], {
-      env: {
-        ...executionEnv,
-        ...process.env, // To get $PATH, etc
-      },
-      ignoreReturnCode: true,
-    });
-
-    if (exitCode !== 0) {
-      this.recordEvent("execution_failure", {
-        exitCode,
-      });
-      actionsCore.setFailed(`Non-zero exit code of \`${exitCode}\`.`);
-    }
-
-    return exitCode;
   }
 }
 
