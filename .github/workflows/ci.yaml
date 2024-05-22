@@ -31,6 +31,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check flake.lock
         uses: ./
+        with:
+          _internal-strict-mode: true
 
   run-x86_64-linux-dirty:
     name: Run x86_64 Linux (dirty)
@@ -41,6 +43,7 @@ jobs:
         uses: ./
         with:
           flake-lock-path: flake.dirty.lock
+          _internal-strict-mode: true
 
   run-x86_64-darwin-clean:
     name: Run x86_64 Darwin (clean)
@@ -49,6 +52,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check flake.lock
         uses: ./
+        with:
+          _internal-strict-mode: true
 
   run-x86_64-darwin-dirty:
     name: Run x86_64 Darwin (dirty)
@@ -59,3 +64,4 @@ jobs:
         uses: ./
         with:
           flake-lock-path: flake.dirty.lock
+          _internal-strict-mode: true

@@ -43,6 +43,9 @@ inputs:
       Anonymously report the number of issues detected by the Nix Flake Checker. This reporting helps
       measure (and thereby improve) the effectiveness of the checker. Set to `false` to disable.
     default: true
+  _internal-strict-mode:
+    description: Whether to fail when any errors are thrown. Used only to test the Action; do not set this in your own workflows.
+    default: false
 runs:
   using: "node20"
   main: "dist/index.js"

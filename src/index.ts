@@ -1,9 +1,8 @@
 import * as actionsCore from "@actions/core";
 import * as actionsExec from "@actions/exec";
-import { ActionOptions, IdsToolbox, inputs } from "detsys-ts";
+import { DetSysAction, inputs } from "detsys-ts";
 
-class FlakeCheckerAction {
-  idslib: IdsToolbox;
+class FlakeCheckerAction extends DetSysAction {
   flakeLockPath: string;
   nixpkgsKeys: string;
   checkOutdated: boolean;
@@ -14,7 +13,7 @@ class FlakeCheckerAction {
   sendStatistics: boolean;
 
   constructor() {
-    const options: ActionOptions = {
+    super({
       name: "flake-checker",
       fetchStyle: "gh-env-style",
       diagnosticsUrl: new URL(
@@ -22,23 +21,24 @@ class FlakeCheckerAction {
       ),
       // We don't need Nix in this Action because we fetch a static binary using curl and run it
       requireNix: "ignore",
-    };
+    });
 
-    this.idslib = new IdsToolbox(options);
-
-    this.flakeLockPath =
-      inputs.getStringOrNull("flake-lock-path") || "flake.lock";
-    this.nixpkgsKeys = inputs.getStringOrNull("nixpkgs-keys") || "nixpkgs";
-
+    this.flakeLockPath = inputs.getString("flake-lock-path");
+    this.nixpkgsKeys = inputs.getString("nixpkgs-keys");
     this.checkOutdated = inputs.getBool("check-outdated");
     this.checkOwner = inputs.getBool("check-owner");
     this.checkSupported = inputs.getBool("check-supported");
-
     this.ignoreMissingFlakeLock = inputs.getBool("ignore-missing-flake-lock");
-
     this.failMode = inputs.getBool("fail-mode");
     this.sendStatistics = inputs.getBool("send-statistics");
   }
+
+  async main(): Promise<void> {
+    await this.checkFlake();
+  }
+
+  // No post step
+  async post(): Promise<void> {}
 
   private async executionEnvironment(): Promise<ExecuteEnvironment> {
     const executionEnv: ExecuteEnvironment = {};
@@ -73,31 +73,44 @@ class FlakeCheckerAction {
     return executionEnv;
   }
 
-  async check(): Promise<number> {
-    const binaryPath = await this.idslib.fetchExecutable();
+  async checkFlake(): Promise<number> {
+    try {
+      const binaryPath = await this.fetchExecutable();
 
-    const executionEnv = await this.executionEnvironment();
-    actionsCore.debug(
-      `Execution environment: ${JSON.stringify(executionEnv, null, 4)}`,
-    );
+      const executionEnv = await this.executionEnvironment();
 
-    const exitCode = await actionsExec.exec(binaryPath, [], {
-      env: {
-        ...executionEnv,
-        ...process.env, // To get $PATH, etc
-      },
-      ignoreReturnCode: true,
-    });
+      actionsCore.debug(
+        `Execution environment: ${JSON.stringify(executionEnv, null, 4)}`,
+      );
 
-    if (exitCode !== 0) {
-      this.idslib.recordEvent("execution_failure", {
-        exitCode,
+      const exitCode = await actionsExec.exec(binaryPath, [], {
+        env: {
+          ...executionEnv,
+          ...process.env, // To get $PATH, etc
+        },
+        ignoreReturnCode: true,
       });
-      actionsCore.setFailed(`Non-zero exit code of \`${exitCode}\`.`);
-    }
 
-    return exitCode;
+      if (exitCode !== 0) {
+        this.recordEvent("execution_failure", {
+          exitCode,
+        });
+        actionsCore.setFailed(`Non-zero exit code of \`${exitCode}\`.`);
+      }
+
+      return exitCode;
+    } catch (e: unknown) {
+      const msg = stringifyError(e);
+      this.failOnError(msg);
+      throw new Error(stringifyError(e));
+    }
   }
+}
+
+function stringifyError(error: unknown): string {
+  return error instanceof Error || typeof error == "string"
+    ? error.toString()
+    : JSON.stringify(error);
 }
 
 type ExecuteEnvironment = {
@@ -114,13 +127,7 @@ type ExecuteEnvironment = {
 };
 
 function main(): void {
-  const checker = new FlakeCheckerAction();
-
-  checker.idslib.onMain(async () => {
-    await checker.check();
-  });
-
-  checker.idslib.execute();
+  new FlakeCheckerAction().execute();
 }
 
 main();
