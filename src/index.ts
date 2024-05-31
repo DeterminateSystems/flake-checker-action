@@ -18,9 +18,7 @@ class FlakeCheckerAction extends DetSysAction {
     super({
       name: "flake-checker",
       fetchStyle: "gh-env-style",
-      diagnosticsUrl: new URL(
-        "https://install.determinate.systems/flake-checker/telemetry",
-      ),
+      diagnosticsSuffix: "telemetry",
       // We don't need Nix in this Action because we fetch a static binary using curl and run it
       requireNix: "ignore",
     });
