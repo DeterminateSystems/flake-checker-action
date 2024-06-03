@@ -93735,7 +93735,7 @@ const external_node_path_namespaceObject = __WEBPACK_EXTERNAL_createRequire(impo
 const external_node_stream_promises_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:stream/promises");
 ;// CONCATENATED MODULE: external "node:zlib"
 const external_node_zlib_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:zlib");
-;// CONCATENATED MODULE: ./node_modules/.pnpm/github.com+DeterminateSystems+detsys-ts@a89bb9a2006fa3f90dd9d34704df8c56ce8ac491_dyrpman4i6hf2ef4ph27vqwm4m/node_modules/detsys-ts/dist/index.js
+;// CONCATENATED MODULE: ./node_modules/.pnpm/github.com+DeterminateSystems+detsys-ts@83979759a46f9328d9a013ef7c8dd9fcd6d6a0e9_oyaeocgf6h2vx7o6xkssj4xyoe/node_modules/detsys-ts/dist/index.js
 var __defProp = Object.defineProperty;
 var __export = (target, all) => {
   for (var name in all)
@@ -94698,7 +94698,11 @@ var DetSysAction = class {
    * 3. Get feature flag data so we can gently roll out new features.
    */
   async requestCheckIn() {
-    for (const checkInUrl = await this.getCheckInUrl(); checkInUrl !== void 0; this.idsHost.markCurrentHostBroken()) {
+    for (let attemptsRemaining = 5; attemptsRemaining > 0; attemptsRemaining--) {
+      const checkInUrl = await this.getCheckInUrl();
+      if (checkInUrl === void 0) {
+        return void 0;
+      }
       try {
         core.debug(`Preflighting via ${checkInUrl}`);
         checkInUrl.searchParams.set("ci", "github");
@@ -94713,6 +94717,7 @@ var DetSysAction = class {
         }).json();
       } catch (e) {
         core.debug(`Error checking in: ${stringifyError2(e)}`);
+        this.idsHost.markCurrentHostBroken();
       }
     }
     return void 0;
