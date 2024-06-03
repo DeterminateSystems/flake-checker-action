@@ -34,6 +34,10 @@ class FlakeCheckerAction extends DetSysAction {
   }
 
   async main(): Promise<void> {
+    if (this.getFeature("test")?.variant) {
+      actionsCore.info("You're in test!");
+    }
+
     await this.checkFlake();
   }
 

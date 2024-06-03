@@ -95070,6 +95070,9 @@ var FlakeCheckerAction = class extends DetSysAction {
     this.sendStatistics = inputs_exports.getBool("send-statistics");
   }
   async main() {
+    if (this.getFeature("test")?.variant) {
+      core.info("You're in test!");
+    }
     await this.checkFlake();
   }
   // No post step
