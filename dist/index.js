@@ -93735,7 +93735,7 @@ const external_node_path_namespaceObject = __WEBPACK_EXTERNAL_createRequire(impo
 const external_node_stream_promises_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:stream/promises");
 ;// CONCATENATED MODULE: external "node:zlib"
 const external_node_zlib_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:zlib");
-;// CONCATENATED MODULE: ./node_modules/.pnpm/github.com+DeterminateSystems+detsys-ts@83979759a46f9328d9a013ef7c8dd9fcd6d6a0e9_oyaeocgf6h2vx7o6xkssj4xyoe/node_modules/detsys-ts/dist/index.js
+;// CONCATENATED MODULE: ./node_modules/.pnpm/github.com+DeterminateSystems+detsys-ts@6de5fcc48f20b92d4c8de5789d4a64ef9a896930_pgs7r4dzghdic7nuphkb7fvcra/node_modules/detsys-ts/dist/index.js
 var __defProp = Object.defineProperty;
 var __export = (target, all) => {
   for (var name in all)
@@ -94643,7 +94643,7 @@ var DetSysAction = class {
       return;
     }
     this.features = checkin.options;
-    for (const [key, feature] of this.features) {
+    for (const [key, feature] of this.features.entries()) {
       this.featureEventMetadata.set(key, feature.variant);
     }
     const impactSymbol = /* @__PURE__ */ new Map([

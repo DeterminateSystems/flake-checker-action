@@ -13,7 +13,7 @@ dependencies:
     version: 1.1.1
   detsys-ts:
     specifier: github:DeterminateSystems/detsys-ts#preflight
-    version: github.com/DeterminateSystems/detsys-ts/83979759a46f9328d9a013ef7c8dd9fcd6d6a0e9
+    version: github.com/DeterminateSystems/detsys-ts/6de5fcc48f20b92d4c8de5789d4a64ef9a896930
 
 devDependencies:
   '@trivago/prettier-plugin-sort-imports':
@@ -3801,8 +3801,8 @@ packages:
     engines: {node: '>=10'}
     dev: true
 
-  github.com/DeterminateSystems/detsys-ts/83979759a46f9328d9a013ef7c8dd9fcd6d6a0e9:
-    resolution: {tarball: https://codeload.github.com/DeterminateSystems/detsys-ts/tar.gz/83979759a46f9328d9a013ef7c8dd9fcd6d6a0e9}
+  github.com/DeterminateSystems/detsys-ts/6de5fcc48f20b92d4c8de5789d4a64ef9a896930:
+    resolution: {tarball: https://codeload.github.com/DeterminateSystems/detsys-ts/tar.gz/6de5fcc48f20b92d4c8de5789d4a64ef9a896930}
     name: detsys-ts
     version: 1.0.0
     dependencies:
