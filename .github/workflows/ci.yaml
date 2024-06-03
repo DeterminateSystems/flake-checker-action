@@ -39,8 +39,6 @@ jobs:
     name: Run x86_64 Linux (dirty)
     needs: build-check-typescript
     runs-on: ubuntu-22.04
-    env:
-      IDS_HOST: https://test-install-determinate-systems.fly.dev
     steps:
       - uses: actions/checkout@v4
       - name: Check flake.lock
