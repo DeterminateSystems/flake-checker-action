@@ -93735,7 +93735,7 @@ const external_node_path_namespaceObject = __WEBPACK_EXTERNAL_createRequire(impo
 const external_node_stream_promises_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:stream/promises");
 ;// CONCATENATED MODULE: external "node:zlib"
 const external_node_zlib_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:zlib");
-;// CONCATENATED MODULE: ./node_modules/.pnpm/github.com+DeterminateSystems+detsys-ts@6de5fcc48f20b92d4c8de5789d4a64ef9a896930_pgs7r4dzghdic7nuphkb7fvcra/node_modules/detsys-ts/dist/index.js
+;// CONCATENATED MODULE: ./node_modules/.pnpm/github.com+DeterminateSystems+detsys-ts@0cf5bc833efc122ef2f09d346de5665658fa1639_moy3aqqawxlrli7hzrmgu47x5y/node_modules/detsys-ts/dist/index.js
 var __defProp = Object.defineProperty;
 var __export = (target, all) => {
   for (var name in all)
@@ -94437,7 +94437,7 @@ var DetSysAction = class {
     this.exceptionAttachments = /* @__PURE__ */ new Map();
     this.nixStoreTrust = "unknown";
     this.strictMode = getBool("_internal-strict-mode");
-    this.features = /* @__PURE__ */ new Map();
+    this.features = {};
     this.featureEventMetadata = /* @__PURE__ */ new Map();
     this.events = [];
     this.client = got_dist_source.extend({
@@ -94643,7 +94643,7 @@ var DetSysAction = class {
       return;
     }
     this.features = checkin.options;
-    for (const [key, feature] of this.features.entries()) {
+    for (const [key, feature] of Object.entries(this.features)) {
       this.featureEventMetadata.set(key, feature.variant);
     }
     const impactSymbol = /* @__PURE__ */ new Map([
@@ -94680,7 +94680,10 @@ var DetSysAction = class {
     }
   }
   getFeature(name) {
-    const result = this.features.get(name);
+    if (!this.features.hasOwnProperty(name)) {
+      return void 0;
+    }
+    const result = this.features[name];
     if (result === void 0) {
       return void 0;
     }
