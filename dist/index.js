@@ -46057,7 +46057,7 @@ FetchError.prototype.name = 'FetchError';
 
 let convert;
 try {
-	convert = (__nccwpck_require__(5950).convert);
+	convert = (__nccwpck_require__(2707).convert);
 } catch (e) {}
 
 const INTERNALS = Symbol('Body internals');
@@ -81923,7 +81923,7 @@ module.exports.implForWrapper = function (wrapper) {
 
 /***/ }),
 
-/***/ 5950:
+/***/ 2707:
 /***/ ((module) => {
 
 module.exports = eval("require")("encoding");
@@ -93735,7 +93735,7 @@ const external_node_path_namespaceObject = __WEBPACK_EXTERNAL_createRequire(impo
 const external_node_stream_promises_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:stream/promises");
 ;// CONCATENATED MODULE: external "node:zlib"
 const external_node_zlib_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:zlib");
-;// CONCATENATED MODULE: ./node_modules/.pnpm/github.com+DeterminateSystems+detsys-ts@7d5dbade5a6d5ec98d9dee26898728e423a3aaa7_bes2lkrhuegn6vtuchi7ayriqy/node_modules/detsys-ts/dist/index.js
+;// CONCATENATED MODULE: ./node_modules/.pnpm/github.com+DeterminateSystems+detsys-ts@c22367f7130075c8a51326ea3086d30e2ce6e7d9_emrobtnwddv5oamb4afhwpou2e/node_modules/detsys-ts/dist/index.js
 var __defProp = Object.defineProperty;
 var __export = (target, all) => {
   for (var name in all)
@@ -94548,8 +94548,9 @@ var DetSysAction = class {
     return this.identity;
   }
   recordEvent(eventName, context = {}) {
+    const prefixedName = eventName === "$feature_flag_called" ? eventName : `${this.actionOptions.eventPrefix}${eventName}`;
     this.events.push({
-      event_name: `${this.actionOptions.eventPrefix}${eventName}`,
+      event_name: prefixedName,
       context,
       correlation: this.identity,
       facts: this.facts,
@@ -94669,7 +94670,7 @@ var DetSysAction = class {
       if (summaries.length > 0) {
         core.info(
           // Bright red, Bold, Underline
-          `${"\x1B[38;2;255;0;0m"}${"\x1B[1m"}${"\x1B[4m"}${checkin.status.page.name} Status`
+          `${"\x1B[0;31m"}${"\x1B[1m"}${"\x1B[4m"}${checkin.status.page.name} Status`
         );
         for (const notice of summaries) {
           core.info(notice);
