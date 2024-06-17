@@ -5,6 +5,7 @@ import { DetSysAction, inputs } from "detsys-ts";
 const EVENT_EXECUTION_FAILURE = "execution_failure";
 
 class FlakeCheckerAction extends DetSysAction {
+  condition: string | null;
   flakeLockPath: string;
   nixpkgsKeys: string;
   checkOutdated: boolean;
@@ -23,6 +24,7 @@ class FlakeCheckerAction extends DetSysAction {
       requireNix: "ignore",
     });
 
+    this.condition = inputs.getStringOrNull("condition");
     this.flakeLockPath = inputs.getString("flake-lock-path");
     this.nixpkgsKeys = inputs.getString("nixpkgs-keys");
     this.checkOutdated = inputs.getBool("check-outdated");
@@ -72,6 +74,10 @@ class FlakeCheckerAction extends DetSysAction {
     executionEnv.NIX_FLAKE_CHECKER_FLAKE_LOCK_PATH = this.flakeLockPath;
     executionEnv.NIX_FLAKE_CHECKER_NIXPKGS_KEYS = this.nixpkgsKeys;
 
+    if (this.condition) {
+      executionEnv.NIX_FLAKE_CHECKER_CONDITION = this.condition;
+    }
+
     if (!this.sendStatistics) {
       executionEnv.NIX_FLAKE_CHECKER_NO_TELEMETRY = "false";
     }
@@ -103,6 +109,7 @@ class FlakeCheckerAction extends DetSysAction {
 type ExecutionEnvironment = {
   // All env vars are strings, no fanciness here.
   RUST_BACKTRACE?: string;
+  NIX_FLAKE_CHECKER_CONDITION?: string;
   NIX_FLAKE_CHECKER_FLAKE_LOCK_PATH?: string;
   NIX_FLAKE_CHECKER_NIXPKGS_KEYS?: string;
   NIX_FLAKE_CHECKER_NO_TELEMETRY?: string;

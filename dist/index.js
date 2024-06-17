@@ -93735,7 +93735,7 @@ const external_node_path_namespaceObject = __WEBPACK_EXTERNAL_createRequire(impo
 const external_node_stream_promises_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:stream/promises");
 ;// CONCATENATED MODULE: external "node:zlib"
 const external_node_zlib_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:zlib");
-;// CONCATENATED MODULE: ./node_modules/.pnpm/github.com+DeterminateSystems+detsys-ts@856a75af22949b76e23f6e54a1b4d27d8816cea4_pejzgrm5rdrx2cw4uhq4rkbcmm/node_modules/detsys-ts/dist/index.js
+;// CONCATENATED MODULE: ./node_modules/.pnpm/github.com+DeterminateSystems+detsys-ts@dd1509475ee7fee37677b858b67aa96ef37a7531_5xj7muga2pf2jza4obzcpzufey/node_modules/detsys-ts/dist/index.js
 var __defProp = Object.defineProperty;
 var __export = (target, all) => {
   for (var name in all)
@@ -95094,6 +95094,7 @@ var FlakeCheckerAction = class extends DetSysAction {
       // We don't need Nix in this Action because we fetch a static binary using curl and run it
       requireNix: "ignore"
     });
+    this.condition = inputs_exports.getStringOrNull("condition");
     this.flakeLockPath = inputs_exports.getString("flake-lock-path");
     this.nixpkgsKeys = inputs_exports.getString("nixpkgs-keys");
     this.checkOutdated = inputs_exports.getBool("check-outdated");
@@ -95135,6 +95136,9 @@ var FlakeCheckerAction = class extends DetSysAction {
     const executionEnv = {};
     executionEnv.NIX_FLAKE_CHECKER_FLAKE_LOCK_PATH = this.flakeLockPath;
     executionEnv.NIX_FLAKE_CHECKER_NIXPKGS_KEYS = this.nixpkgsKeys;
+    if (this.condition) {
+      executionEnv.NIX_FLAKE_CHECKER_CONDITION = this.condition;
+    }
     if (!this.sendStatistics) {
       executionEnv.NIX_FLAKE_CHECKER_NO_TELEMETRY = "false";
     }
