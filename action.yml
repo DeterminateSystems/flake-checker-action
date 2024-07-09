@@ -9,6 +9,11 @@ inputs:
     description: |
       The path to the `flake.lock` file you want to check.
     default: flake.lock
+  condition:
+    description: |
+      A Common Expression Language (CEL) condition expressing your flake policy.
+      Supersedes all `check-*` parameters.
+    required: false
   check-outdated:
     description: |
       Whether to check that the root Nixpkgs input is less than 30 days old.

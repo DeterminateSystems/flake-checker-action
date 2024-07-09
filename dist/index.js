@@ -95094,6 +95094,7 @@ var FlakeCheckerAction = class extends DetSysAction {
       // We don't need Nix in this Action because we fetch a static binary using curl and run it
       requireNix: "ignore"
     });
+    this.condition = inputs_exports.getStringOrNull("condition");
     this.flakeLockPath = inputs_exports.getString("flake-lock-path");
     this.nixpkgsKeys = inputs_exports.getString("nixpkgs-keys");
     this.checkOutdated = inputs_exports.getBool("check-outdated");
@@ -95135,6 +95136,9 @@ var FlakeCheckerAction = class extends DetSysAction {
     const executionEnv = {};
     executionEnv.NIX_FLAKE_CHECKER_FLAKE_LOCK_PATH = this.flakeLockPath;
     executionEnv.NIX_FLAKE_CHECKER_NIXPKGS_KEYS = this.nixpkgsKeys;
+    if (this.condition) {
+      executionEnv.NIX_FLAKE_CHECKER_CONDITION = this.condition;
+    }
     if (!this.sendStatistics) {
       executionEnv.NIX_FLAKE_CHECKER_NO_TELEMETRY = "false";
     }
