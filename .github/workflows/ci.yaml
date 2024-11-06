@@ -50,7 +50,7 @@ jobs:
   run-x86_64-darwin-clean:
     name: Run x86_64 Darwin (clean)
     needs: build-check-typescript
-    runs-on: macos-12
+    runs-on: macos-13
     steps:
       - uses: actions/checkout@v4
       - name: Check flake.lock
@@ -61,7 +61,7 @@ jobs:
   run-x86_64-darwin-dirty:
     name: Run x86_64 Darwin (dirty)
     needs: build-check-typescript
-    runs-on: macos-12
+    runs-on: macos-13
     steps:
       - uses: actions/checkout@v4
       - name: Check flake.lock
