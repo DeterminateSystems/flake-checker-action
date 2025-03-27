@@ -26,7 +26,6 @@ jobs:
 
   run-x86_64-linux-clean:
     name: Run x86_64 Linux (clean)
-    needs: build-check-typescript
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
