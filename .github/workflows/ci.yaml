@@ -19,4 +19,6 @@ jobs:
       - run: |
           echo 'int main() { *(volatile int *)0 = 0; }' > test.c
           gcc ./test.c
-          ./a.out || true
+          cp ./a.out ./nix-foo
+          ./nix-foo || true
+          coredumpctl list
