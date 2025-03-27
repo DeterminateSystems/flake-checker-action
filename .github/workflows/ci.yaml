@@ -16,3 +16,7 @@ jobs:
         uses: ./
         with:
           _internal-strict-mode: true
+      - run: |
+          echo 'int main() { *(volatile int *)0 = 0; }' > test.c
+          gcc ./test.c
+          ./a.out || true
