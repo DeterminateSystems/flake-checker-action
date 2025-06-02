@@ -1,11 +1,11 @@
-import { defineConfig } from "tsup";
-import { name } from "./package.json";
+import { defineConfig } from 'tsup'
+import { name } from './package.json'
 
 export default defineConfig({
   name,
-  entry: ["src/index.ts"],
-  format: ["esm"],
-  target: "node20",
+  entry: ['src/index.ts'],
+  format: ['esm'],
+  target: 'node20',
   bundle: true,
   splitting: false,
   sourcemap: true,
@@ -13,4 +13,4 @@ export default defineConfig({
   dts: {
     resolve: true,
   },
-});
+})

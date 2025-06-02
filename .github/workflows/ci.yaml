@@ -17,7 +17,7 @@ jobs:
       - uses: DeterminateSystems/determinate-nix-action@v3
       - uses: DeterminateSystems/flakehub-cache-action@main
       - run: nix develop --command pnpm install
-      - run: nix develop --command pnpm run format
+      - run: nix develop --command pnpm run check-fmt
       - run: nix develop --command pnpm run lint
       - run: nix develop --command pnpm run build
       - run: nix develop --command pnpm run package
