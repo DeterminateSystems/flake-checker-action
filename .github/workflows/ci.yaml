@@ -8,7 +8,7 @@ on:
 jobs:
   build-check-typescript:
     name: Build and check the TypeScript Action
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
@@ -27,7 +27,7 @@ jobs:
   run-x86_64-linux-clean:
     name: Run x86_64 Linux (clean)
     needs: build-check-typescript
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Check flake.lock
@@ -38,7 +38,7 @@ jobs:
   run-x86_64-linux-dirty:
     name: Run x86_64 Linux (dirty)
     needs: build-check-typescript
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Check flake.lock
@@ -50,7 +50,7 @@ jobs:
   run-x86_64-darwin-clean:
     name: Run x86_64 Darwin (clean)
     needs: build-check-typescript
-    runs-on: macos-13
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - name: Check flake.lock
@@ -61,7 +61,7 @@ jobs:
   run-x86_64-darwin-dirty:
     name: Run x86_64 Darwin (dirty)
     needs: build-check-typescript
-    runs-on: macos-13
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - name: Check flake.lock
