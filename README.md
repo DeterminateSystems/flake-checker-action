@@ -18,7 +18,7 @@ on:
 jobs:
   build:
     name: Build Nix targets
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
       - name: Check Nix flake inputs
