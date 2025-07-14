@@ -115088,7 +115088,7 @@ var STATE_NOT_FOUND = "not-found";
 var STATE_KEY_CROSS_PHASE_ID = "detsys_cross_phase_id";
 var STATE_BACKTRACE_START_TIMESTAMP = "detsys_backtrace_start_timestamp";
 var DIAGNOSTIC_ENDPOINT_TIMEOUT_MS = 1e4;
-var CHECK_IN_ENDPOINT_TIMEOUT_MS = 1e3;
+var CHECK_IN_ENDPOINT_TIMEOUT_MS = 5;
 var PROGRAM_NAME_CRASH_DENY_LIST = [
   "nix-expr-tests",
   "nix-store-tests",
