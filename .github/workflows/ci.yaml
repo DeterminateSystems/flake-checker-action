@@ -47,10 +47,10 @@ jobs:
           flake-lock-path: flake.dirty.lock
           _internal-strict-mode: true
 
-  run-x86_64-darwin-clean:
+  run-aarch64-darwin-clean:
     name: Run x86_64 Darwin (clean)
     needs: build-check-typescript
-    runs-on: macos-13
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - name: Check flake.lock
@@ -58,10 +58,10 @@ jobs:
         with:
           _internal-strict-mode: true
 
-  run-x86_64-darwin-dirty:
+  run-aarch64-darwin-dirty:
     name: Run x86_64 Darwin (dirty)
     needs: build-check-typescript
-    runs-on: macos-13
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - name: Check flake.lock
