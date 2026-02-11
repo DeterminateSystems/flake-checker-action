@@ -69,3 +69,24 @@ jobs:
         with:
           flake-lock-path: flake.dirty.lock
           _internal-strict-mode: true
+
+  success:
+    name: Success
+    needs:
+      - run-x86_64-linux-clean
+      - run-x86_64-linux-dirty
+      - run-aarch64-darwin-clean
+      - run-aarch64-darwin-dirty
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: "true"
+      - run: |
+          echo "A dependent in the build matrix failed:"
+          echo "$needs"
+          exit 1
+        env:
+          needs: ${{ toJSON(needs) }}
+        if: |
+          contains(needs.*.result, 'failure') ||
+          contains(needs.*.result, 'cancelled')
