@@ -47,10 +47,10 @@ jobs:
           flake-lock-path: flake.dirty.lock
           _internal-strict-mode: true
 
-  run-x86_64-darwin-clean:
+  run-aarch64-darwin-clean:
     name: Run x86_64 Darwin (clean)
     needs: build-check-typescript
-    runs-on: macos-13
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - name: Check flake.lock
@@ -58,10 +58,10 @@ jobs:
         with:
           _internal-strict-mode: true
 
-  run-x86_64-darwin-dirty:
+  run-aarch64-darwin-dirty:
     name: Run x86_64 Darwin (dirty)
     needs: build-check-typescript
-    runs-on: macos-13
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - name: Check flake.lock
@@ -69,3 +69,24 @@ jobs:
         with:
           flake-lock-path: flake.dirty.lock
           _internal-strict-mode: true
+
+  success:
+    name: Success
+    needs:
+      - run-x86_64-linux-clean
+      - run-x86_64-linux-dirty
+      - run-aarch64-darwin-clean
+      - run-aarch64-darwin-dirty
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: "true"
+      - run: |
+          echo "A dependent in the build matrix failed:"
+          echo "$needs"
+          exit 1
+        env:
+          needs: ${{ toJSON(needs) }}
+        if: |
+          contains(needs.*.result, 'failure') ||
+          contains(needs.*.result, 'cancelled')
