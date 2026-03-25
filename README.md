@@ -18,9 +18,9 @@ on:
 jobs:
   build:
     name: Build Nix targets
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
       - name: Check Nix flake inputs
         uses: DeterminateSystems/flake-checker-action@main # This action
       - name: Install Nix
