@@ -13,7 +13,7 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: DeterminateSystems/determinate-nix-action@v3
       - uses: DeterminateSystems/flakehub-cache-action@main
       - run: nix develop --command pnpm install
@@ -29,7 +29,7 @@ jobs:
     needs: build-check-typescript
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Check flake.lock
         uses: ./
         with:
@@ -40,7 +40,7 @@ jobs:
     needs: build-check-typescript
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Check flake.lock
         uses: ./
         with:
@@ -52,7 +52,7 @@ jobs:
     needs: build-check-typescript
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Check flake.lock
         uses: ./
         with:
@@ -63,7 +63,7 @@ jobs:
     needs: build-check-typescript
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Check flake.lock
         uses: ./
         with:
