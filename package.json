@@ -24,8 +24,8 @@
   },
   "homepage": "https://github.com/DeterminateSystems/flake-checker-action#readme",
   "dependencies": {
-    "@actions/core": "^1.11.1",
-    "@actions/exec": "^1.1.1",
+    "@actions/core": "^3.0.0",
+    "@actions/exec": "^3.0.0",
     "detsys-ts": "github:DeterminateSystems/detsys-ts"
   },
   "devDependencies": {
