@@ -16,13 +16,31 @@ jobs:
       - uses: actions/checkout@v6
       - uses: DeterminateSystems/determinate-nix-action@v3
       - uses: DeterminateSystems/flakehub-cache-action@main
-      - run: nix develop --command pnpm install
-      - run: nix develop --command pnpm run format
-      - run: nix develop --command pnpm run lint
-      - run: nix develop --command pnpm run build
-      - run: nix develop --command pnpm run package
-      - run: git status --porcelain=v1
-      - run: git diff --exit-code
+
+      - name: Get npm cache directory
+        id: npm-cache-directory
+        run: |
+          echo "directory=$(nix develop --command npm config get cache | tr -d '\n')" >> $GITHUB_OUTPUT
+
+      - name: Set up npm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.npm-cache-directory.outputs.directory }}
+          key: flake-checker-action-npm-cache-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            flake-checker-action-npm-cache
+
+      - run: nix develop --command npm ci
+      - run: nix develop --command npm run format
+      - run: nix develop --command npm run lint
+      - run: nix develop --command npm run build
+      - run: nix develop --command npm run package
+      - name: git status
+        run: git status --porcelain=v1
+      - name: Ensure no unstaged changes
+        run: git diff --exit-code
+      - name: Ensure no staged changes
+        run: git diff --cached --exit-code
 
   run-x86_64-linux-clean:
     name: Run x86_64 Linux (clean)

@@ -10,7 +10,7 @@
     "format": "prettier --write .",
     "lint": "eslint src/**/*.ts",
     "package": "ncc build",
-    "all": "pnpm run format && pnpm run lint && pnpm run build && pnpm run package"
+    "all": "npm run format && npm run lint && npm run build && npm run package"
   },
   "repository": {
     "type": "git",
