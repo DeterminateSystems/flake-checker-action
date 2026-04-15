@@ -2,9 +2,7 @@
 {
   description = "Development environment for the Flake Checker action for GitHub";
 
-  inputs = {
-    nixpkgs.url = "https://flakehub.com/f/NixOS/nixpkgs/0.1";
-  };
+  inputs.nixpkgs.url = "https://flakehub.com/f/NixOS/nixpkgs/0.1";
 
   outputs =
     { self, ... }@inputs:
@@ -29,11 +27,17 @@
       devShells = forEachSupportedSystem (
         { pkgs, system }:
         {
-          default = pkgs.mkShell {
+          default = pkgs.mkShellNoCC {
             packages = with pkgs; [
               nodejs_latest
-              nodePackages_latest.pnpm
+
               self.formatter.${system}
+
+              # Keep people from accidentally running pnpm
+              (writeScriptBin "pnpm" ''
+                echo "pnpm is no longer used in this repo; use npm instead"
+                exit 1
+              '')
             ];
           };
         }
