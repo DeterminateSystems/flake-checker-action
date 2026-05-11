@@ -13,8 +13,10 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v6
-      - uses: DeterminateSystems/determinate-nix-action@v3
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: DeterminateSystems/determinate-nix-action@main
       - uses: DeterminateSystems/flakehub-cache-action@main
 
       - name: Get npm cache directory
@@ -23,7 +25,7 @@ jobs:
           echo "directory=$(nix develop --command npm config get cache | tr -d '\n')" >> $GITHUB_OUTPUT
 
       - name: Set up npm cache
-        uses: actions/cache@v4
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ${{ steps.npm-cache-directory.outputs.directory }}
           key: flake-checker-action-npm-cache-${{ hashFiles('**/package-lock.json') }}
@@ -46,8 +48,12 @@ jobs:
     name: Run x86_64 Linux (clean)
     needs: build-check-typescript
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
       - name: Check flake.lock
         uses: ./
         with:
@@ -57,8 +63,12 @@ jobs:
     name: Run x86_64 Linux (dirty)
     needs: build-check-typescript
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
       - name: Check flake.lock
         uses: ./
         with:
@@ -69,8 +79,12 @@ jobs:
     name: Run x86_64 Darwin (clean)
     needs: build-check-typescript
     runs-on: macos-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
       - name: Check flake.lock
         uses: ./
         with:
@@ -80,8 +94,12 @@ jobs:
     name: Run x86_64 Darwin (dirty)
     needs: build-check-typescript
     runs-on: macos-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
       - name: Check flake.lock
         uses: ./
         with:
@@ -90,6 +108,8 @@ jobs:
 
   success:
     name: Success
+    permissions:
+      contents: read
     needs:
       - run-x86_64-linux-clean
       - run-x86_64-linux-dirty
