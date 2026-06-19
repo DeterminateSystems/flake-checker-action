@@ -42846,6 +42846,10 @@ __nccwpck_require__.d(mappers_namespaceObject, {
   UserDelegationKey: () => (UserDelegationKey)
 });
 
+;// CONCATENATED MODULE: external "fs"
+const external_fs_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("fs");
+// EXTERNAL MODULE: external "path"
+var external_path_ = __nccwpck_require__(6928);
 // EXTERNAL MODULE: external "os"
 var external_os_ = __nccwpck_require__(857);
 ;// CONCATENATED MODULE: ./node_modules/@actions/core/lib/utils.js
@@ -42978,8 +42982,6 @@ function escapeProperty(s) {
 //# sourceMappingURL=command.js.map
 ;// CONCATENATED MODULE: external "crypto"
 const external_crypto_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("crypto");
-;// CONCATENATED MODULE: external "fs"
-const external_fs_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("fs");
 ;// CONCATENATED MODULE: ./node_modules/@actions/core/lib/file-command.js
 // For internal use, subject to change.
 // We use any as a valid input type
@@ -43015,8 +43017,6 @@ function file_command_prepareKeyValueMessage(key, value) {
     return `${key}<<${delimiter}${external_os_.EOL}${convertedValue}${external_os_.EOL}${delimiter}`;
 }
 //# sourceMappingURL=file-command.js.map
-// EXTERNAL MODULE: external "path"
-var external_path_ = __nccwpck_require__(6928);
 // EXTERNAL MODULE: external "http"
 var external_http_ = __nccwpck_require__(8611);
 var external_http_namespaceObject = /*#__PURE__*/__nccwpck_require__.t(external_http_, 2);
@@ -108901,6 +108901,8 @@ function makeOptionsConfident(actionOptions) {
 
 
 
+
+
 var EVENT_EXECUTION_FAILURE = "execution_failure";
 var FlakeCheckerAction = class extends DetSysAction {
   constructor() {
@@ -108913,6 +108915,12 @@ var FlakeCheckerAction = class extends DetSysAction {
     });
     this.condition = inputs_exports.getStringOrNull("condition");
     this.flakeLockPath = inputs_exports.getString("flake-lock-path");
+    try {
+      if (external_fs_namespaceObject.statSync(this.flakeLockPath).isDirectory()) {
+        this.flakeLockPath = external_path_.join(this.flakeLockPath, "flake.lock");
+      }
+    } catch {
+    }
     this.nixpkgsKeys = inputs_exports.getString("nixpkgs-keys");
     this.checkOutdated = inputs_exports.getBool("check-outdated");
     this.checkOwner = inputs_exports.getBool("check-owner");

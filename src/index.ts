@@ -1,3 +1,5 @@
+import * as fs from "fs";
+import * as path from "path";
 import * as actionsCore from "@actions/core";
 import * as actionsExec from "@actions/exec";
 import { DetSysAction, inputs } from "detsys-ts";
@@ -26,6 +28,13 @@ class FlakeCheckerAction extends DetSysAction {
 
     this.condition = inputs.getStringOrNull("condition");
     this.flakeLockPath = inputs.getString("flake-lock-path");
+    try {
+      if (fs.statSync(this.flakeLockPath).isDirectory()) {
+        this.flakeLockPath = path.join(this.flakeLockPath, "flake.lock");
+      }
+    } catch {
+      // Ignore errors if the path does not exist
+    }
     this.nixpkgsKeys = inputs.getString("nixpkgs-keys");
     this.checkOutdated = inputs.getBool("check-outdated");
     this.checkOwner = inputs.getBool("check-owner");
