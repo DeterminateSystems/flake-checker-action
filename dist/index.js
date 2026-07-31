@@ -109444,7 +109444,7 @@ var FlakeCheckerAction = class extends DetSysAction {
       executionEnv.NIX_FLAKE_CHECKER_CONDITION = this.condition;
     }
     if (!this.sendStatistics) {
-      executionEnv.NIX_FLAKE_CHECKER_NO_TELEMETRY = "false";
+      executionEnv.NIX_FLAKE_CHECKER_NO_TELEMETRY = "true";
     }
     if (!this.checkOutdated) {
       executionEnv.NIX_FLAKE_CHECKER_CHECK_OUTDATED = "false";
