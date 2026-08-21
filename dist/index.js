@@ -99898,6 +99898,26 @@ function getIDToken(aud) {
 const promises_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:fs/promises");
 // EXTERNAL MODULE: external "node:crypto"
 var external_node_crypto_ = __nccwpck_require__(77598);
+// EXTERNAL MODULE: ./node_modules/@opentelemetry/api/build/src/index.js
+var src = __nccwpck_require__(63914);
+// EXTERNAL MODULE: ./node_modules/@opentelemetry/api-logs/build/src/index.js
+var build_src = __nccwpck_require__(79334);
+// EXTERNAL MODULE: ./node_modules/@opentelemetry/context-async-hooks/build/src/index.js
+var context_async_hooks_build_src = __nccwpck_require__(18805);
+// EXTERNAL MODULE: ./node_modules/@opentelemetry/core/build/src/index.js
+var core_build_src = __nccwpck_require__(24637);
+// EXTERNAL MODULE: ./node_modules/@opentelemetry/exporter-logs-otlp-http/build/src/index.js
+var exporter_logs_otlp_http_build_src = __nccwpck_require__(42102);
+// EXTERNAL MODULE: ./node_modules/@opentelemetry/exporter-trace-otlp-http/build/src/index.js
+var exporter_trace_otlp_http_build_src = __nccwpck_require__(86004);
+// EXTERNAL MODULE: ./node_modules/@opentelemetry/resources/build/src/index.js
+var resources_build_src = __nccwpck_require__(75647);
+// EXTERNAL MODULE: ./node_modules/@opentelemetry/sdk-logs/build/src/index.js
+var sdk_logs_build_src = __nccwpck_require__(32450);
+// EXTERNAL MODULE: ./node_modules/@opentelemetry/sdk-trace-base/build/src/index-shim.js
+var index_shim = __nccwpck_require__(19644);
+// EXTERNAL MODULE: ./node_modules/@opentelemetry/semantic-conventions/build/src/index.js
+var semantic_conventions_build_src = __nccwpck_require__(13695);
 ;// CONCATENATED MODULE: external "node:timers/promises"
 const external_node_timers_promises_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:timers/promises");
 ;// CONCATENATED MODULE: ./node_modules/@sindresorhus/is/distribution/utilities.js
@@ -110455,26 +110475,6 @@ const got = source_create(defaults);
 
 ;// CONCATENATED MODULE: external "node:dns/promises"
 const external_node_dns_promises_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:dns/promises");
-// EXTERNAL MODULE: ./node_modules/@opentelemetry/api/build/src/index.js
-var src = __nccwpck_require__(63914);
-// EXTERNAL MODULE: ./node_modules/@opentelemetry/api-logs/build/src/index.js
-var build_src = __nccwpck_require__(79334);
-// EXTERNAL MODULE: ./node_modules/@opentelemetry/context-async-hooks/build/src/index.js
-var context_async_hooks_build_src = __nccwpck_require__(18805);
-// EXTERNAL MODULE: ./node_modules/@opentelemetry/core/build/src/index.js
-var core_build_src = __nccwpck_require__(24637);
-// EXTERNAL MODULE: ./node_modules/@opentelemetry/exporter-logs-otlp-http/build/src/index.js
-var exporter_logs_otlp_http_build_src = __nccwpck_require__(42102);
-// EXTERNAL MODULE: ./node_modules/@opentelemetry/exporter-trace-otlp-http/build/src/index.js
-var exporter_trace_otlp_http_build_src = __nccwpck_require__(86004);
-// EXTERNAL MODULE: ./node_modules/@opentelemetry/resources/build/src/index.js
-var resources_build_src = __nccwpck_require__(75647);
-// EXTERNAL MODULE: ./node_modules/@opentelemetry/sdk-logs/build/src/index.js
-var sdk_logs_build_src = __nccwpck_require__(32450);
-// EXTERNAL MODULE: ./node_modules/@opentelemetry/sdk-trace-base/build/src/index-shim.js
-var index_shim = __nccwpck_require__(19644);
-// EXTERNAL MODULE: ./node_modules/@opentelemetry/semantic-conventions/build/src/index.js
-var semantic_conventions_build_src = __nccwpck_require__(13695);
 ;// CONCATENATED MODULE: ./node_modules/@actions/glob/lib/internal-glob-options-helper.js
 
 /**
@@ -163896,6 +163896,402 @@ function hashEnvironmentVariables(prefix, variables) {
 	return `${prefix}-${hash.digest("hex")}`;
 }
 //#endregion
+//#region src/telemetry.ts
+/**
+* @packageDocumentation
+* OpenTelemetry traces and logs for Determinate Systems' GitHub Actions.
+*
+* The OpenTelemetry API is a no-op until a provider is registered globally.
+* That means instrumentation call sites -- spans, log records -- can be
+* written unconditionally: when export is disabled they cost nothing and no
+* branching is needed at the call site.
+*
+* The SDK configures itself from the standard `OTEL_*` environment variables.
+* This module only supplies defaults for the variables the user has not set,
+* so every documented OpenTelemetry knob works here as it does anywhere else.
+*/
+/** The instrumentation scope name for everything this library emits. */
+const SCOPE_NAME = "detsys-ts";
+/**
+* The OTLP/HTTP collector for all Actions.
+* The exporters add `/v1/traces` and `/v1/logs` to this URL.
+*
+* This collector is a fixed service.
+* It is not one of the install.determinate.systems backends.
+* Thus it does not use their SRV failover.
+*/
+const DEFAULT_OTLP_ENDPOINT = "https://otel.determinate.systems";
+/**
+* The token for {@link DEFAULT_OTLP_ENDPOINT}.
+* The exporters send it as `Authorization: Bearer <token>`.
+* That is the default scheme of the collector's `bearertokenauth` extension.
+*
+* This token is public.
+* It ships in `dist/`, on npm, and in each workflow that uses this library.
+* It permits telemetry writes and no other operation.
+* Change it in the collector configuration and in this file at the same time.
+*/
+const OTLP_INGEST_TOKEN = "8bfa2d8b689352981286f0149c4e55cc0dff30a4f7a735b560e31479904a74e1";
+/**
+* How long to wait for buffered spans and logs to reach the collector before
+* giving up. The Action's process exits immediately afterward, so this is a
+* hard ceiling on how much a slow collector can delay a workflow.
+*/
+const SHUTDOWN_TIMEOUT_MS = 5e3;
+/**
+* The default for `OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT`.
+*
+* The SDK's own default is unlimited. Attributes here can carry pasted
+* command output and other unbounded text, which the collector should not
+* have to absorb, so cap them. File-sized payloads go out as log records
+* instead: a log record's body is not an attribute and is not truncated.
+*/
+const DEFAULT_ATTRIBUTE_VALUE_LENGTH_LIMIT = 8192;
+/** The OTLP environment variables a child process inherits from this run. */
+const OTLP_EXPORT_VARIABLES = [
+	"OTEL_EXPORTER_OTLP_ENDPOINT",
+	"OTEL_EXPORTER_OTLP_HEADERS",
+	"OTEL_EXPORTER_OTLP_COMPRESSION"
+];
+/**
+* Our own propagator instance, rather than the global one.
+*
+* The global propagator only exists once {@link Telemetry.start} has
+* registered it, which would make traceparent handling silently depend on
+* start-up ordering. Owning an instance keeps {@link traceparentOf} and {@link
+* contextFromTraceparent} correct no matter when they're called.
+*/
+const PROPAGATOR = new core_build_src.W3CTraceContextPropagator();
+const SEVERITY = {
+	debug: build_src.SeverityNumber.DEBUG,
+	info: build_src.SeverityNumber.INFO,
+	notice: build_src.SeverityNumber.INFO2,
+	warning: build_src.SeverityNumber.WARN,
+	error: build_src.SeverityNumber.ERROR
+};
+/**
+* Whether this run exports telemetry at all.
+*
+* `OTEL_SDK_DISABLED=true` is the standard way to turn the export off. An
+* empty `OTEL_EXPORTER_OTLP_ENDPOINT` does the same, which is what this
+* library documented before `OTEL_SDK_DISABLED` was in the specification.
+*/
+function exportEnabled() {
+	if ((0,core_build_src.getBooleanFromEnv)("OTEL_SDK_DISABLED")) return false;
+	const endpoint = process.env["OTEL_EXPORTER_OTLP_ENDPOINT"];
+	if (endpoint !== void 0 && endpoint.trim() === "") return false;
+	return true;
+}
+/**
+* Fill in the `OTEL_*` variables this run needs and the user has not set.
+*
+* From here on the exporters read their whole configuration from the
+* environment, exactly as they would in any other OpenTelemetry program.
+* Child processes inherit the same variables, so their telemetry reaches the
+* same collector without any further arrangement.
+*/
+function applyOtlpEnvironmentDefaults() {
+	if ((0,core_build_src.getStringFromEnv)("OTEL_EXPORTER_OTLP_ENDPOINT") === void 0) process.env["OTEL_EXPORTER_OTLP_ENDPOINT"] = DEFAULT_OTLP_ENDPOINT;
+	if (exportsToDefaultCollector()) {
+		const headers = (0,core_build_src.parseKeyPairsIntoRecord)((0,core_build_src.getStringFromEnv)("OTEL_EXPORTER_OTLP_HEADERS"));
+		if (!Object.keys(headers).some((name) => name.toLowerCase() === "authorization")) {
+			headers["Authorization"] = `Bearer ${OTLP_INGEST_TOKEN}`;
+			process.env["OTEL_EXPORTER_OTLP_HEADERS"] = encodeOtlpHeaders(headers);
+		}
+	}
+	if ((0,core_build_src.getStringFromEnv)("OTEL_EXPORTER_OTLP_COMPRESSION") === void 0) process.env["OTEL_EXPORTER_OTLP_COMPRESSION"] = "gzip";
+	if ((0,core_build_src.getNumberFromEnv)("OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT") === void 0) process.env["OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT"] = `${DEFAULT_ATTRIBUTE_VALUE_LENGTH_LIMIT}`;
+}
+/**
+* Whether this run sends its data to {@link DEFAULT_OTLP_ENDPOINT}.
+*
+* Only that collector gets {@link OTLP_INGEST_TOKEN}. A collector the user
+* chose must not receive our credentials.
+*/
+function exportsToDefaultCollector() {
+	const endpoint = (0,core_build_src.getStringFromEnv)("OTEL_EXPORTER_OTLP_ENDPOINT");
+	if (endpoint === void 0) return false;
+	try {
+		return new URL(endpoint).toString() === new URL(DEFAULT_OTLP_ENDPOINT).toString();
+	} catch {
+		return false;
+	}
+}
+/**
+* The OTLP variables in the environment, for a child process that does not
+* inherit ours.
+*/
+function otlpExportEnvironment() {
+	const environment = {};
+	for (const name of OTLP_EXPORT_VARIABLES) {
+		const value = (0,core_build_src.getStringFromEnv)(name);
+		if (value !== void 0) environment[name] = value;
+	}
+	return environment;
+}
+/**
+* Make the value of `OTEL_EXPORTER_OTLP_HEADERS`.
+*
+* The variable uses the W3C baggage format.
+* The reader decodes each percent-encoded value.
+* Thus you must encode the space in `Bearer <token>`.
+* If you do not encode it, the scheme and the token become two entries.
+*/
+function encodeOtlpHeaders(headers) {
+	return Object.entries(headers).map(([name, value]) => `${encodeURIComponent(name)}=${encodeURIComponent(value)}`).join(",");
+}
+/**
+* The generator of the trace and span IDs of this run.
+*
+* It makes random IDs, as the default generator does.
+* It can also give one span an identity that you supply.
+* That is how a span that one process announces starts in a different process.
+* See {@link Telemetry.startAnnouncedSpan}.
+*/
+var PinnedIdGenerator = class {
+	/** Give the next span this identity. */
+	pin(traceId, spanId) {
+		this.traceId = traceId;
+		this.spanId = spanId;
+	}
+	/** Give each subsequent span a random identity again. */
+	unpin() {
+		this.traceId = void 0;
+		this.spanId = void 0;
+	}
+	generateTraceId() {
+		return this.traceId ?? randomHex(16);
+	}
+	generateSpanId() {
+		return this.spanId ?? randomHex(8);
+	}
+};
+/**
+* Owns the OpenTelemetry SDK's lifecycle. Constructing this does nothing on
+* its own; `start()` registers the global providers and `shutdown()` flushes
+* whatever is buffered.
+*/
+var Telemetry = class {
+	/** Whether OTLP export is actually running. */
+	get enabled() {
+		return this.tracerProvider !== void 0;
+	}
+	/**
+	* Register the global tracer and logger providers.
+	*
+	* Safe to call at most once. If it throws, telemetry stays disabled and the
+	* Action carries on: instrumentation degrades to the API's no-ops rather
+	* than failing the workflow.
+	*/
+	start(options) {
+		if (this.enabled || !exportEnabled()) return;
+		try {
+			applyOtlpEnvironmentDefaults();
+			const resource = (0,resources_build_src.defaultResource)().merge((0,resources_build_src.resourceFromAttributes)({
+				[semantic_conventions_build_src.ATTR_SERVICE_NAME]: options.serviceName,
+				...options.serviceVersion === void 0 ? {} : { [semantic_conventions_build_src.ATTR_SERVICE_VERSION]: options.serviceVersion },
+				...options.resourceAttributes
+			})).merge((0,resources_build_src.detectResources)({ detectors: [resources_build_src.envDetector] }));
+			this.idGenerator = new PinnedIdGenerator();
+			this.tracerProvider = new index_shim/* BasicTracerProvider */.l({
+				resource,
+				idGenerator: this.idGenerator,
+				spanProcessors: [new index_shim/* BatchSpanProcessor */.J(new exporter_trace_otlp_http_build_src/* OTLPTraceExporter */.Q())]
+			});
+			this.loggerProvider = new sdk_logs_build_src/* LoggerProvider */.IB({
+				resource,
+				logRecordLimits: { attributeValueLengthLimit: (0,core_build_src.getNumberFromEnv)("OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT") },
+				processors: [new sdk_logs_build_src/* BatchLogRecordProcessor */.E6({ exporter: new exporter_logs_otlp_http_build_src/* OTLPLogExporter */.B() })]
+			});
+			src.context.setGlobalContextManager(new context_async_hooks_build_src/* AsyncLocalStorageContextManager */.Hp().enable());
+			src.propagation.setGlobalPropagator(PROPAGATOR);
+			src.trace.setGlobalTracerProvider(this.tracerProvider);
+			build_src.logs.setGlobalLoggerProvider(this.loggerProvider);
+			core_debug(`OpenTelemetry export enabled to ${(0,core_build_src.getStringFromEnv)("OTEL_EXPORTER_OTLP_ENDPOINT")}`);
+		} catch (e) {
+			this.tracerProvider = void 0;
+			this.loggerProvider = void 0;
+			this.idGenerator = void 0;
+			core_debug(`Failed to start OpenTelemetry export, continuing without it: ${stringifyError(e)}`);
+		}
+	}
+	/**
+	* Start the span that {@link newTraceparent} announced.
+	*
+	* A workflow job runs each Action as a process of its own.
+	* Thus a span that covers more than one Action can only start in one of them.
+	* The Action that announces such a span makes its identity known first, and
+	* starts the span itself last, in the process that runs at the end.
+	* The spans that already point at that identity then find their parent.
+	*
+	* The span starts at `startTime`, which is the moment of the announcement.
+	* It is a root span, because the announcement is the start of the trace.
+	*
+	* Returns undefined if the export is off, or if `traceparent` does not name a
+	* usable span.
+	*/
+	startAnnouncedSpan(name, traceparent, startTime) {
+		const generator = this.idGenerator;
+		const spanContext = src.trace.getSpanContext(contextFromTraceparent(traceparent));
+		if (generator === void 0 || this.tracerProvider === void 0 || spanContext === void 0 || !(0,src.isSpanContextValid)(spanContext)) return;
+		const tracer = this.tracerProvider.getTracer(SCOPE_NAME, "1.0");
+		try {
+			generator.pin(spanContext.traceId, spanContext.spanId);
+			return tracer.startSpan(name, {
+				startTime,
+				root: true
+			});
+		} finally {
+			generator.unpin();
+		}
+	}
+	/**
+	* Flush buffered spans and logs and tear the SDK down.
+	*
+	* Never throws and never hangs: the Action calls this on its way out, so a
+	* broken or slow collector must not be able to fail or stall the workflow.
+	*/
+	async shutdown() {
+		const providers = [this.tracerProvider, this.loggerProvider].flatMap((p) => p ?? []);
+		if (providers.length === 0) return;
+		try {
+			await withTimeout(Promise.all(providers.map(async (p) => p.shutdown())), SHUTDOWN_TIMEOUT_MS);
+		} catch (e) {
+			core_debug(`Error flushing OpenTelemetry data: ${stringifyError(e)}`);
+		} finally {
+			this.tracerProvider = void 0;
+			this.loggerProvider = void 0;
+			this.idGenerator = void 0;
+		}
+	}
+};
+/**
+* The tracer for this library. Returns a no-op tracer until {@link
+* Telemetry.start} has run, so this is always safe to call.
+*/
+function getTracer() {
+	return src.trace.getTracer(SCOPE_NAME, "1.0");
+}
+/**
+* The logger for this library. Returns a no-op logger until {@link
+* Telemetry.start} has run, so this is always safe to call.
+*/
+function getLogger() {
+	return build_src.logs.getLogger(SCOPE_NAME, "1.0");
+}
+/**
+* Emit a log record at `level`, correlated to whatever span is currently
+* active.
+*/
+function emitLogRecord(level, message, attributes) {
+	getLogger().emit({
+		severityNumber: SEVERITY[level],
+		severityText: level.toUpperCase(),
+		body: message,
+		attributes,
+		context: src.context.active()
+	});
+}
+/**
+* Serialize a span as a W3C `traceparent` header value, suitable for stashing
+* in the Action's state or handing to a child process.
+*
+* Returns undefined when telemetry is disabled, since the no-op span's context
+* is all zeroes and would not be a valid parent.
+*/
+function traceparentOf(span) {
+	if (span === void 0 || !(0,src.isSpanContextValid)(span.spanContext())) return;
+	const carrier = {};
+	PROPAGATOR.inject(src.trace.setSpan(src.ROOT_CONTEXT, span), carrier, src.defaultTextMapSetter);
+	return carrier["traceparent"];
+}
+/**
+* Make the identity of a trace and of its root span, but do not start the span.
+*
+* Announce the result to each process that must join the trace.
+* Start the span itself with {@link Telemetry.startAnnouncedSpan}.
+*
+* The identity says that the trace is sampled.
+* A process that only forwards the identity cannot ask the sampler.
+* An unsampled parent would discard the work of each process that joins.
+*/
+function newTraceparent() {
+	return `00-${randomHex(16)}-${randomHex(8)}-01`;
+}
+/**
+* The W3C trace context headers of the operation in progress, for an outgoing
+* HTTP request.
+*
+* Put these headers on the request.
+* The service that answers it can then put its own work in this trace.
+*
+* The headers describe the span that is active now.
+* When no span is active yet -- a request the Action makes before it opens a
+* span of its own -- they describe the trace of the workflow job, from
+* `$TRACEPARENT`.
+*
+* The result is empty when the export is off.
+* A no-op span's context is all zeroes, and is not a valid parent.
+*/
+function traceContextHeaders() {
+	const active = src.context.active();
+	const context$1 = src.trace.getSpanContext(active) === void 0 ? contextFromTraceparent(process.env["TRACEPARENT"]) : active;
+	const carrier = {};
+	PROPAGATOR.inject(context$1, carrier, src.defaultTextMapSetter);
+	return carrier;
+}
+/**
+* Rebuild a Context from a W3C `traceparent` value, so a span started in one
+* process can parent spans started in another. Falls back to the root context
+* when `traceparent` is absent or unparseable.
+*/
+function contextFromTraceparent(traceparent) {
+	if (traceparent === void 0 || traceparent === "") return src.ROOT_CONTEXT;
+	return PROPAGATOR.extract(src.ROOT_CONTEXT, { traceparent }, src.defaultTextMapGetter);
+}
+/**
+* Mark `span` as failed and attach the exception to it.
+*/
+function recordSpanError(span, error) {
+	span.recordException(error instanceof Error ? error : new Error(stringifyError(error)));
+	span.setStatus({
+		code: src.SpanStatusCode.ERROR,
+		message: stringifyError(error)
+	});
+}
+/**
+* Run `fn` inside a new active span, ending the span when it settles and
+* marking it failed if it throws. The error is always re-thrown: this records,
+* it does not swallow.
+*/
+async function withSpan(name, fn, attributes) {
+	return await getTracer().startActiveSpan(name, { attributes }, async (span) => {
+		try {
+			return await fn(span);
+		} catch (e) {
+			recordSpanError(span, e);
+			throw e;
+		} finally {
+			span.end();
+		}
+	});
+}
+/** A random ID of `bytes` bytes, in the lowercase hex the W3C format uses. */
+function randomHex(bytes) {
+	return (0,external_node_crypto_.randomBytes)(bytes).toString("hex");
+}
+/** Reject if `promise` has not settled within `timeoutMs`. */
+async function withTimeout(promise, timeoutMs) {
+	let timer;
+	try {
+		return await Promise.race([promise, new Promise((_resolve, reject) => {
+			timer = setTimeout(() => reject(/* @__PURE__ */ new Error(`timed out after ${timeoutMs}ms`)), timeoutMs);
+		})]);
+	} finally {
+		if (timer !== void 0) clearTimeout(timer);
+	}
+}
+//#endregion
 //#region src/ids-host.ts
 /**
 * @packageDocumentation
@@ -163933,6 +164329,7 @@ var IdsHost = class {
 					info(`Retrying after error ${error.code}, retry #: ${retryCount}`);
 				}],
 				beforeRequest: [async (options) => {
+					for (const [name, value] of Object.entries(traceContextHeaders())) options.headers[name] = value;
 					const currentUrl = options.url;
 					if (this.isUrlSubjectToDynamicUrls(currentUrl)) {
 						const newUrl = new URL(currentUrl);
@@ -164168,303 +164565,6 @@ const getStringOrUndefined = (name) => {
 	else return value;
 };
 //#endregion
-//#region src/telemetry.ts
-/**
-* @packageDocumentation
-* OpenTelemetry traces and logs for Determinate Systems' GitHub Actions.
-*
-* The OpenTelemetry API is a no-op until a provider is registered globally.
-* That means instrumentation call sites -- spans, log records -- can be
-* written unconditionally: when export is disabled they cost nothing and no
-* branching is needed at the call site.
-*
-* The SDK configures itself from the standard `OTEL_*` environment variables.
-* This module only supplies defaults for the variables the user has not set,
-* so every documented OpenTelemetry knob works here as it does anywhere else.
-*/
-/** The instrumentation scope name for everything this library emits. */
-const SCOPE_NAME = "detsys-ts";
-/**
-* The OTLP/HTTP collector for all Actions.
-* The exporters add `/v1/traces` and `/v1/logs` to this URL.
-*
-* This collector is a fixed service.
-* It is not one of the install.determinate.systems backends.
-* Thus it does not use their SRV failover.
-*/
-const DEFAULT_OTLP_ENDPOINT = "https://otel.determinate.systems";
-/**
-* The token for {@link DEFAULT_OTLP_ENDPOINT}.
-* The exporters send it as `Authorization: Bearer <token>`.
-* That is the default scheme of the collector's `bearertokenauth` extension.
-*
-* This token is public.
-* It ships in `dist/`, on npm, and in each workflow that uses this library.
-* It permits telemetry writes and no other operation.
-* Change it in the collector configuration and in this file at the same time.
-*/
-const OTLP_INGEST_TOKEN = "8bfa2d8b689352981286f0149c4e55cc0dff30a4f7a735b560e31479904a74e1";
-/**
-* How long to wait for buffered spans and logs to reach the collector before
-* giving up. The Action's process exits immediately afterward, so this is a
-* hard ceiling on how much a slow collector can delay a workflow.
-*/
-const SHUTDOWN_TIMEOUT_MS = 5e3;
-/**
-* The default for `OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT`.
-*
-* The SDK's own default is unlimited. Attributes here can carry pasted
-* command output and other unbounded text, which the collector should not
-* have to absorb, so cap them. File-sized payloads go out as log records
-* instead: a log record's body is not an attribute and is not truncated.
-*/
-const DEFAULT_ATTRIBUTE_VALUE_LENGTH_LIMIT = 8192;
-/** The OTLP environment variables a child process inherits from this run. */
-const OTLP_EXPORT_VARIABLES = [
-	"OTEL_EXPORTER_OTLP_ENDPOINT",
-	"OTEL_EXPORTER_OTLP_HEADERS",
-	"OTEL_EXPORTER_OTLP_COMPRESSION"
-];
-/**
-* Our own propagator instance, rather than the global one.
-*
-* The global propagator only exists once {@link Telemetry.start} has
-* registered it, which would make traceparent handling silently depend on
-* start-up ordering. Owning an instance keeps {@link traceparentOf} and {@link
-* contextFromTraceparent} correct no matter when they're called.
-*/
-const PROPAGATOR = new core_build_src.W3CTraceContextPropagator();
-const SEVERITY = {
-	debug: build_src.SeverityNumber.DEBUG,
-	info: build_src.SeverityNumber.INFO,
-	notice: build_src.SeverityNumber.INFO2,
-	warning: build_src.SeverityNumber.WARN,
-	error: build_src.SeverityNumber.ERROR
-};
-/**
-* Whether this run exports telemetry at all.
-*
-* `OTEL_SDK_DISABLED=true` is the standard way to turn the export off. An
-* empty `OTEL_EXPORTER_OTLP_ENDPOINT` does the same, which is what this
-* library documented before `OTEL_SDK_DISABLED` was in the specification.
-*/
-function exportEnabled() {
-	if ((0,core_build_src.getBooleanFromEnv)("OTEL_SDK_DISABLED")) return false;
-	const endpoint = process.env["OTEL_EXPORTER_OTLP_ENDPOINT"];
-	if (endpoint !== void 0 && endpoint.trim() === "") return false;
-	return true;
-}
-/**
-* Fill in the `OTEL_*` variables this run needs and the user has not set.
-*
-* From here on the exporters read their whole configuration from the
-* environment, exactly as they would in any other OpenTelemetry program.
-* Child processes inherit the same variables, so their telemetry reaches the
-* same collector without any further arrangement.
-*/
-function applyOtlpEnvironmentDefaults() {
-	if ((0,core_build_src.getStringFromEnv)("OTEL_EXPORTER_OTLP_ENDPOINT") === void 0) process.env["OTEL_EXPORTER_OTLP_ENDPOINT"] = DEFAULT_OTLP_ENDPOINT;
-	if (exportsToDefaultCollector()) {
-		const headers = (0,core_build_src.parseKeyPairsIntoRecord)((0,core_build_src.getStringFromEnv)("OTEL_EXPORTER_OTLP_HEADERS"));
-		if (!Object.keys(headers).some((name) => name.toLowerCase() === "authorization")) {
-			headers["Authorization"] = `Bearer ${OTLP_INGEST_TOKEN}`;
-			process.env["OTEL_EXPORTER_OTLP_HEADERS"] = encodeOtlpHeaders(headers);
-		}
-	}
-	if ((0,core_build_src.getStringFromEnv)("OTEL_EXPORTER_OTLP_COMPRESSION") === void 0) process.env["OTEL_EXPORTER_OTLP_COMPRESSION"] = "gzip";
-	if ((0,core_build_src.getNumberFromEnv)("OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT") === void 0) process.env["OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT"] = `${DEFAULT_ATTRIBUTE_VALUE_LENGTH_LIMIT}`;
-}
-/**
-* Whether this run sends its data to {@link DEFAULT_OTLP_ENDPOINT}.
-*
-* Only that collector gets {@link OTLP_INGEST_TOKEN}. A collector the user
-* chose must not receive our credentials.
-*/
-function exportsToDefaultCollector() {
-	const endpoint = (0,core_build_src.getStringFromEnv)("OTEL_EXPORTER_OTLP_ENDPOINT");
-	if (endpoint === void 0) return false;
-	try {
-		return new URL(endpoint).toString() === new URL(DEFAULT_OTLP_ENDPOINT).toString();
-	} catch {
-		return false;
-	}
-}
-/**
-* The OTLP variables in the environment, for a child process that does not
-* inherit ours.
-*/
-function otlpExportEnvironment() {
-	const environment = {};
-	for (const name of OTLP_EXPORT_VARIABLES) {
-		const value = (0,core_build_src.getStringFromEnv)(name);
-		if (value !== void 0) environment[name] = value;
-	}
-	return environment;
-}
-/**
-* Make the value of `OTEL_EXPORTER_OTLP_HEADERS`.
-*
-* The variable uses the W3C baggage format.
-* The reader decodes each percent-encoded value.
-* Thus you must encode the space in `Bearer <token>`.
-* If you do not encode it, the scheme and the token become two entries.
-*/
-function encodeOtlpHeaders(headers) {
-	return Object.entries(headers).map(([name, value]) => `${encodeURIComponent(name)}=${encodeURIComponent(value)}`).join(",");
-}
-/**
-* Owns the OpenTelemetry SDK's lifecycle. Constructing this does nothing on
-* its own; `start()` registers the global providers and `shutdown()` flushes
-* whatever is buffered.
-*/
-var Telemetry = class {
-	/** Whether OTLP export is actually running. */
-	get enabled() {
-		return this.tracerProvider !== void 0;
-	}
-	/**
-	* Register the global tracer and logger providers.
-	*
-	* Safe to call at most once. If it throws, telemetry stays disabled and the
-	* Action carries on: instrumentation degrades to the API's no-ops rather
-	* than failing the workflow.
-	*/
-	start(options) {
-		if (this.enabled || !exportEnabled()) return;
-		try {
-			applyOtlpEnvironmentDefaults();
-			const resource = (0,resources_build_src.defaultResource)().merge((0,resources_build_src.resourceFromAttributes)({
-				[semantic_conventions_build_src.ATTR_SERVICE_NAME]: options.serviceName,
-				...options.serviceVersion === void 0 ? {} : { [semantic_conventions_build_src.ATTR_SERVICE_VERSION]: options.serviceVersion },
-				...options.resourceAttributes
-			})).merge((0,resources_build_src.detectResources)({ detectors: [resources_build_src.envDetector] }));
-			this.tracerProvider = new index_shim/* BasicTracerProvider */.l({
-				resource,
-				spanProcessors: [new index_shim/* BatchSpanProcessor */.J(new exporter_trace_otlp_http_build_src/* OTLPTraceExporter */.Q())]
-			});
-			this.loggerProvider = new sdk_logs_build_src/* LoggerProvider */.IB({
-				resource,
-				logRecordLimits: { attributeValueLengthLimit: (0,core_build_src.getNumberFromEnv)("OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT") },
-				processors: [new sdk_logs_build_src/* BatchLogRecordProcessor */.E6({ exporter: new exporter_logs_otlp_http_build_src/* OTLPLogExporter */.B() })]
-			});
-			src.context.setGlobalContextManager(new context_async_hooks_build_src/* AsyncLocalStorageContextManager */.Hp().enable());
-			src.propagation.setGlobalPropagator(PROPAGATOR);
-			src.trace.setGlobalTracerProvider(this.tracerProvider);
-			build_src.logs.setGlobalLoggerProvider(this.loggerProvider);
-			core_debug(`OpenTelemetry export enabled to ${(0,core_build_src.getStringFromEnv)("OTEL_EXPORTER_OTLP_ENDPOINT")}`);
-		} catch (e) {
-			this.tracerProvider = void 0;
-			this.loggerProvider = void 0;
-			core_debug(`Failed to start OpenTelemetry export, continuing without it: ${stringifyError(e)}`);
-		}
-	}
-	/**
-	* Flush buffered spans and logs and tear the SDK down.
-	*
-	* Never throws and never hangs: the Action calls this on its way out, so a
-	* broken or slow collector must not be able to fail or stall the workflow.
-	*/
-	async shutdown() {
-		const providers = [this.tracerProvider, this.loggerProvider].flatMap((p) => p ?? []);
-		if (providers.length === 0) return;
-		try {
-			await withTimeout(Promise.all(providers.map(async (p) => p.shutdown())), SHUTDOWN_TIMEOUT_MS);
-		} catch (e) {
-			core_debug(`Error flushing OpenTelemetry data: ${stringifyError(e)}`);
-		} finally {
-			this.tracerProvider = void 0;
-			this.loggerProvider = void 0;
-		}
-	}
-};
-/**
-* The tracer for this library. Returns a no-op tracer until {@link
-* Telemetry.start} has run, so this is always safe to call.
-*/
-function getTracer() {
-	return src.trace.getTracer(SCOPE_NAME, "1.0");
-}
-/**
-* The logger for this library. Returns a no-op logger until {@link
-* Telemetry.start} has run, so this is always safe to call.
-*/
-function getLogger() {
-	return build_src.logs.getLogger(SCOPE_NAME, "1.0");
-}
-/**
-* Emit a log record at `level`, correlated to whatever span is currently
-* active.
-*/
-function emitLogRecord(level, message, attributes) {
-	getLogger().emit({
-		severityNumber: SEVERITY[level],
-		severityText: level.toUpperCase(),
-		body: message,
-		attributes,
-		context: src.context.active()
-	});
-}
-/**
-* Serialize a span as a W3C `traceparent` header value, suitable for stashing
-* in the Action's state or handing to a child process.
-*
-* Returns undefined when telemetry is disabled, since the no-op span's context
-* is all zeroes and would not be a valid parent.
-*/
-function traceparentOf(span) {
-	if (span === void 0 || !(0,src.isSpanContextValid)(span.spanContext())) return;
-	const carrier = {};
-	PROPAGATOR.inject(src.trace.setSpan(src.ROOT_CONTEXT, span), carrier, src.defaultTextMapSetter);
-	return carrier["traceparent"];
-}
-/**
-* Rebuild a Context from a W3C `traceparent` value, so a span started in one
-* process can parent spans started in another. Falls back to the root context
-* when `traceparent` is absent or unparseable.
-*/
-function contextFromTraceparent(traceparent) {
-	if (traceparent === void 0 || traceparent === "") return src.ROOT_CONTEXT;
-	return PROPAGATOR.extract(src.ROOT_CONTEXT, { traceparent }, src.defaultTextMapGetter);
-}
-/**
-* Mark `span` as failed and attach the exception to it.
-*/
-function recordSpanError(span, error) {
-	span.recordException(error instanceof Error ? error : new Error(stringifyError(error)));
-	span.setStatus({
-		code: src.SpanStatusCode.ERROR,
-		message: stringifyError(error)
-	});
-}
-/**
-* Run `fn` inside a new active span, ending the span when it settles and
-* marking it failed if it throws. The error is always re-thrown: this records,
-* it does not swallow.
-*/
-async function withSpan(name, fn, attributes) {
-	return await getTracer().startActiveSpan(name, { attributes }, async (span) => {
-		try {
-			return await fn(span);
-		} catch (e) {
-			recordSpanError(span, e);
-			throw e;
-		} finally {
-			span.end();
-		}
-	});
-}
-/** Reject if `promise` has not settled within `timeoutMs`. */
-async function withTimeout(promise, timeoutMs) {
-	let timer;
-	try {
-		return await Promise.race([promise, new Promise((_resolve, reject) => {
-			timer = setTimeout(() => reject(/* @__PURE__ */ new Error(`timed out after ${timeoutMs}ms`)), timeoutMs);
-		})]);
-	} finally {
-		if (timer !== void 0) clearTimeout(timer);
-	}
-}
-//#endregion
 //#region src/log.ts
 /**
 * @packageDocumentation
@@ -164665,6 +164765,10 @@ const STATE_NOT_FOUND = "not-found";
 const STATE_KEY_CROSS_PHASE_ID = "detsys_cross_phase_id";
 const STATE_BACKTRACE_START_TIMESTAMP = "detsys_backtrace_start_timestamp";
 const STATE_KEY_TRACEPARENT = "detsys_otel_traceparent";
+const STATE_KEY_JOB_TRACEPARENT = "detsys_otel_job_traceparent";
+const STATE_KEY_JOB_SPAN_START = "detsys_otel_job_span_start";
+const ENV_TRACEPARENT = "TRACEPARENT";
+const SPAN_JOB = "github_actions_job";
 const CHECK_IN_ENDPOINT_TIMEOUT_MS = 1e3;
 const PROGRAM_NAME_CRASH_DENY_LIST = [
 	"nix-expr-tests",
@@ -164848,6 +164952,7 @@ var DetSysAction = class {
 	async executeAsync() {
 		const phaseStartTime = /* @__PURE__ */ new Date();
 		try {
+			this.announceJobTrace(phaseStartTime);
 			await this.checkIn();
 			await this.startTelemetry();
 			this.startPhaseSpan(phaseStartTime);
@@ -164918,13 +165023,57 @@ var DetSysAction = class {
 		});
 	}
 	/**
+	* Put every Action of this workflow job in one trace.
+	*
+	* A job runs each Action as a process of its own.
+	* Thus the Actions can only agree on a trace through the job's environment.
+	* The first Action to run makes the identity of the job's span and exports it
+	* as `$TRACEPARENT`.
+	* Each later step finds it there: the other Actions, and the programs the
+	* workflow runs, such as Nix.
+	*
+	* The span itself starts and ends in the post phase of the Action that
+	* announced it.
+	* GitHub Actions runs the post phases in the reverse of the order of the main
+	* phases, thus that phase is the last one of the job.
+	* The span then covers the whole job.
+	* See {@link endJobSpan}.
+	*
+	* A `$TRACEPARENT` that is already set belongs to an earlier Action, or to the
+	* system that started the workflow.
+	* Do not change it, and join that trace.
+	*/
+	announceJobTrace(startTime) {
+		if (!this.isMain || !exportEnabled()) return;
+		if (process.env[ENV_TRACEPARENT]) return;
+		const traceparent = newTraceparent();
+		exportVariable(ENV_TRACEPARENT, traceparent);
+		saveState(STATE_KEY_JOB_TRACEPARENT, traceparent);
+		saveState(STATE_KEY_JOB_SPAN_START, `${startTime.getTime()}`);
+	}
+	/**
+	* End the job's span, if this Action is the one that announced it.
+	*
+	* The span also starts here.
+	* A span belongs to the process that ends it, and the process that made the
+	* announcement stopped long ago.
+	* See {@link announceJobTrace}.
+	*/
+	endJobSpan() {
+		if (!this.isPost) return;
+		const traceparent = getState(STATE_KEY_JOB_TRACEPARENT);
+		if (traceparent === "") return;
+		const startTime = parseInt(getState(STATE_KEY_JOB_SPAN_START), 10);
+		this.telemetry.startAnnouncedSpan(SPAN_JOB, traceparent, new Date(Number.isFinite(startTime) ? startTime : Date.now()))?.end();
+	}
+	/**
 	* Open the root span for this execution phase.
 	*
 	* `main` and `post` are separate processes, so the main phase publishes its
 	* span as a W3C traceparent in the Action's state and the post phase adopts
 	* it as a parent. That puts both phases of a run in one trace. A
-	* `$TRACEPARENT` in the environment parents the whole run into a trace that
-	* started outside this Action.
+	* `$TRACEPARENT` in the environment parents the run into the trace of the
+	* workflow job, which {@link announceJobTrace} starts.
 	*/
 	startPhaseSpan(startTime) {
 		const parentContext = contextFromTraceparent(getState(STATE_KEY_TRACEPARENT) || process.env["TRACEPARENT"] || void 0);
@@ -165265,6 +165414,7 @@ var DetSysAction = class {
 	async complete() {
 		this.phaseSpan?.end();
 		this.phaseSpan = void 0;
+		this.endJobSpan();
 		await this.telemetry.shutdown();
 	}
 	async getCheckInUrl() {
