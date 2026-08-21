@@ -164912,7 +164912,7 @@ var DetSysAction = class {
 	*/
 	async startTelemetry() {
 		this.telemetry.start({
-			serviceName: this.actionOptions.name,
+			serviceName: `${this.actionOptions.name}-action`,
 			serviceVersion: process.env["GITHUB_ACTION_REF"],
 			resourceAttributes: await this.telemetryResourceAttributes()
 		});
