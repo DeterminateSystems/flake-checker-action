@@ -164125,22 +164125,20 @@ var Telemetry = class {
 	* The spans that already point at that identity then find their parent.
 	*
 	* The span starts at `startTime`, which is the moment of the announcement.
-	* It is a root span, because the announcement is the start of the trace.
+	* It is a child of the span in `parentContext`, and a root span if that
+	* context holds no span.
 	*
 	* Returns undefined if the export is off, or if `traceparent` does not name a
 	* usable span.
 	*/
-	startAnnouncedSpan(name, traceparent, startTime) {
+	startAnnouncedSpan(name, traceparent, startTime, parentContext = src.ROOT_CONTEXT) {
 		const generator = this.idGenerator;
 		const spanContext = src.trace.getSpanContext(contextFromTraceparent(traceparent));
 		if (generator === void 0 || this.tracerProvider === void 0 || spanContext === void 0 || !(0,src.isSpanContextValid)(spanContext)) return;
 		const tracer = this.tracerProvider.getTracer(SCOPE_NAME, "1.0");
 		try {
 			generator.pin(spanContext.traceId, spanContext.spanId);
-			return tracer.startSpan(name, {
-				startTime,
-				root: true
-			});
+			return tracer.startSpan(name, { startTime }, parentContext);
 		} finally {
 			generator.unpin();
 		}
@@ -164206,16 +164204,24 @@ function traceparentOf(span) {
 	return carrier["traceparent"];
 }
 /**
-* Make the identity of a trace and of its root span, but do not start the span.
+* Make the identity of a span, but do not start the span.
 *
-* Announce the result to each process that must join the trace.
+* Announce the result to whatever must point at the span before it starts:
+* a different process, or a request this process makes too early to record.
 * Start the span itself with {@link Telemetry.startAnnouncedSpan}.
 *
-* The identity says that the trace is sampled.
-* A process that only forwards the identity cannot ask the sampler.
-* An unsampled parent would discard the work of each process that joins.
+* The span is in the trace of `parent`, or in a new trace of its own if there
+* is no usable parent.
+* A new trace is sampled, because a process that only forwards an identity
+* cannot ask the sampler, and an unsampled parent would discard the work of
+* each process that joins.
 */
-function newTraceparent() {
+function newTraceparent(parent) {
+	const parentContext = src.trace.getSpanContext(contextFromTraceparent(parent));
+	if (parentContext !== void 0 && (0,src.isSpanContextValid)(parentContext)) {
+		const flags = parentContext.traceFlags.toString(16).padStart(2, "0");
+		return `00-${parentContext.traceId}-${randomHex(8)}-${flags}`;
+	}
 	return `00-${randomHex(16)}-${randomHex(8)}-01`;
 }
 /**
@@ -164226,9 +164232,9 @@ function newTraceparent() {
 * The service that answers it can then put its own work in this trace.
 *
 * The headers describe the span that is active now.
-* When no span is active yet -- a request the Action makes before it opens a
-* span of its own -- they describe the trace of the workflow job, from
-* `$TRACEPARENT`.
+* When no span is active yet -- a request the Action makes before it starts a
+* span of its own -- they describe the span that `$TRACEPARENT` names, which is
+* the span the Action announced, or the span of the workflow job.
 *
 * The result is empty when the export is off.
 * A no-op span's context is all zeroes, and is not a valid parent.
@@ -164769,6 +164775,7 @@ const STATE_KEY_JOB_TRACEPARENT = "detsys_otel_job_traceparent";
 const STATE_KEY_JOB_SPAN_START = "detsys_otel_job_span_start";
 const ENV_TRACEPARENT = "TRACEPARENT";
 const SPAN_JOB = "github_actions_job";
+const SPAN_CHECK_IN = "check_in";
 const CHECK_IN_ENDPOINT_TIMEOUT_MS = 1e3;
 const PROGRAM_NAME_CRASH_DENY_LIST = [
 	"nix-expr-tests",
@@ -164953,9 +164960,11 @@ var DetSysAction = class {
 		const phaseStartTime = /* @__PURE__ */ new Date();
 		try {
 			this.announceJobTrace(phaseStartTime);
+			this.announcePhaseSpan();
 			await this.checkIn();
 			await this.startTelemetry();
 			this.startPhaseSpan(phaseStartTime);
+			this.startCheckInSpan();
 			await this.withPhaseSpanActive(async () => {
 				const correlationHashes = JSON.stringify(this.getCorrelationHashes());
 				process.env.DETSYS_CORRELATION = correlationHashes;
@@ -165067,27 +165076,65 @@ var DetSysAction = class {
 		this.telemetry.startAnnouncedSpan(SPAN_JOB, traceparent, new Date(Number.isFinite(startTime) ? startTime : Date.now()))?.end();
 	}
 	/**
-	* Open the root span for this execution phase.
+	* Make the identity of a span that starts later, and point each request made
+	* until then at it.
 	*
-	* `main` and `post` are separate processes, so the main phase publishes its
-	* span as a W3C traceparent in the Action's state and the post phase adopts
-	* it as a parent. That puts both phases of a run in one trace. A
-	* `$TRACEPARENT` in the environment parents the run into the trace of the
-	* workflow job, which {@link announceJobTrace} starts.
+	* The variable changes in this process only.
+	* The later steps of the job keep the identity of the job's span.
+	*/
+	announceSpan(parent) {
+		if (!exportEnabled()) return;
+		const traceparent = newTraceparent(parent);
+		process.env[ENV_TRACEPARENT] = traceparent;
+		return traceparent;
+	}
+	/**
+	* Announce the identity of this phase's span.
+	*
+	* The span cannot start until the SDK does, and the SDK cannot start until
+	* the check-in supplies the feature flags.
+	* Thus this Action makes requests before it has a span of its own.
+	* The announcement gives those requests the identity that the span starts
+	* with later, so that the work the servers do for them is part of this
+	* Action, and not of the workflow job.
+	*
+	* `main` and `post` are separate processes.
+	* Thus the main phase saves its identity in the Action's state, and the post
+	* phase makes its span a child of it.
+	* A `$TRACEPARENT` in the environment is the span of the workflow job, or of
+	* the system that started the workflow.
+	*/
+	announcePhaseSpan() {
+		this.phaseParentTraceparent = getState(STATE_KEY_TRACEPARENT) || process.env[ENV_TRACEPARENT] || void 0;
+		this.phaseTraceparent = this.announceSpan(this.phaseParentTraceparent);
+	}
+	/**
+	* Start the root span of this execution phase, with the identity that {@link
+	* announcePhaseSpan} announced.
+	*
+	* The span starts at the moment the phase did, and thus covers the check-in
+	* and the start of the SDK, which both come before it.
 	*/
 	startPhaseSpan(startTime) {
-		const parentContext = contextFromTraceparent(getState(STATE_KEY_TRACEPARENT) || process.env["TRACEPARENT"] || void 0);
-		const span = getTracer().startSpan(`${this.actionOptions.name}:${this.executionPhase}`, {
-			startTime,
-			attributes: this.pendingAttributes
-		}, parentContext);
+		if (this.phaseTraceparent === void 0) return;
+		const span = this.telemetry.startAnnouncedSpan(`${this.actionOptions.name}:${this.executionPhase}`, this.phaseTraceparent, startTime, contextFromTraceparent(this.phaseParentTraceparent));
+		if (span === void 0) return;
+		span.setAttributes(this.pendingAttributes);
 		this.pendingAttributes = {};
 		if (this.isMain) {
 			const traceparent = traceparentOf(span);
 			if (traceparent !== void 0) saveState(STATE_KEY_TRACEPARENT, traceparent);
 		}
 		this.phaseSpan = span;
-		return span;
+	}
+	/**
+	* Start and end the span for the check-in, which ran before the SDK could
+	* record it.
+	*/
+	startCheckInSpan() {
+		const timing = this.checkInTiming;
+		if (timing === void 0 || this.phaseSpan === void 0) return;
+		this.telemetry.startAnnouncedSpan(SPAN_CHECK_IN, timing.traceparent, timing.startTime, src.trace.setSpan(src.context.active(), this.phaseSpan))?.end(timing.endTime);
 	}
 	/**
 	* The stable, run-scoped attributes attached to every span and log record.
@@ -165159,6 +165206,24 @@ var DetSysAction = class {
 		});
 	}
 	async checkIn() {
+		const traceparent = this.announceSpan(this.phaseTraceparent);
+		const startTime = /* @__PURE__ */ new Date();
+		try {
+			await this.checkInAndReport();
+		} finally {
+			if (traceparent !== void 0) this.checkInTiming = {
+				traceparent,
+				startTime,
+				endTime: /* @__PURE__ */ new Date()
+			};
+			if (this.phaseTraceparent !== void 0) process.env[ENV_TRACEPARENT] = this.phaseTraceparent;
+		}
+	}
+	/**
+	* Check in, and tell the user about the incidents and the maintenance the
+	* check-in reports.
+	*/
+	async checkInAndReport() {
 		const checkin = await this.requestCheckIn();
 		if (checkin === void 0) return;
 		this.features = checkin.options;
