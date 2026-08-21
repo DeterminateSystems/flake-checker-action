@@ -1,8 +1,9 @@
-import * as actionsCore from "@actions/core";
 import * as actionsExec from "@actions/exec";
-import { DetSysAction, inputs } from "detsys-ts";
+import { DetSysAction, inputs, log, withSpan } from "detsys-ts";
 
-const EVENT_EXECUTION_FAILURE = "execution_failure";
+const EVENT_EXECUTION_FAILURE = "detsys.execution_failure";
+
+const ATTR_EXIT_CODE = "detsys.exit_code";
 
 class FlakeCheckerAction extends DetSysAction {
   condition: string | null;
@@ -43,29 +44,36 @@ class FlakeCheckerAction extends DetSysAction {
   async post(): Promise<void> {}
 
   private async checkFlake(): Promise<number> {
-    const binaryPath = await this.fetchExecutable();
-    const executionEnv = await this.executionEnvironment();
+    return await withSpan("check_flake", async (span) => {
+      const binaryPath = await this.fetchExecutable();
+      const executionEnv = await this.executionEnvironment();
 
-    actionsCore.debug(
-      `Execution environment: ${JSON.stringify(executionEnv, null, 4)}`,
-    );
+      log.debug(
+        `Execution environment: ${JSON.stringify(executionEnv, null, 4)}`,
+      );
 
-    const exitCode = await actionsExec.exec(binaryPath, [], {
-      env: {
-        ...executionEnv,
-        ...process.env, // To get $PATH, etc
-      },
-      ignoreReturnCode: true,
-    });
+      const exitCode = await actionsExec.exec(binaryPath, [], {
+        env: {
+          ...executionEnv,
+          ...process.env, // To get $PATH, etc
 
-    if (exitCode !== 0) {
-      this.recordEvent(EVENT_EXECUTION_FAILURE, {
-        exitCode,
+          // Let the flake checker's own telemetry join this Action's trace.
+          ...(await this.getTelemetryEnvironment()),
+        },
+        ignoreReturnCode: true,
       });
-      actionsCore.setFailed(`Non-zero exit code of \`${exitCode}\`.`);
-    }
 
-    return exitCode;
+      span.setAttribute(ATTR_EXIT_CODE, exitCode);
+
+      if (exitCode !== 0) {
+        this.addEvent(EVENT_EXECUTION_FAILURE, {
+          [ATTR_EXIT_CODE]: exitCode,
+        });
+        log.setFailed(`Non-zero exit code of \`${exitCode}\`.`);
+      }
+
+      return exitCode;
+    });
   }
 
   private async executionEnvironment(): Promise<ExecutionEnvironment> {
