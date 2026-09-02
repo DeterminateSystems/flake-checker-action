@@ -1,6 +1,6 @@
 import * as actionsCore from "@actions/core";
 import * as actionsExec from "@actions/exec";
-import { DetSysAction, inputs } from "detsys-ts";
+import { DetSysAction, inputs } from "@determinate-systems/detsys-ts";
 
 const EVENT_EXECUTION_FAILURE = "execution_failure";
 
