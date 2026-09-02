@@ -26,7 +26,7 @@
   "dependencies": {
     "@actions/core": "^3.0.0",
     "@actions/exec": "^3.0.0",
-    "detsys-ts": "github:DeterminateSystems/detsys-ts"
+    "@determinate-systems/detsys-ts": "^1.0.0"
   },
   "devDependencies": {
     "@trivago/prettier-plugin-sort-imports": "^6.0.2",
