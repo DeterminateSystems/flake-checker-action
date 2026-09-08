@@ -92,7 +92,7 @@ class FlakeCheckerAction extends DetSysAction {
     }
 
     if (!this.sendStatistics) {
-      executionEnv.NIX_FLAKE_CHECKER_NO_TELEMETRY = "false";
+      executionEnv.NIX_FLAKE_CHECKER_NO_TELEMETRY = "true";
     }
 
     if (!this.checkOutdated) {
