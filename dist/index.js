@@ -1,1234 +1,6 @@
 import { createRequire as __WEBPACK_EXTERNAL_createRequire } from "module";
 /******/ var __webpack_modules__ = ({
 
-/***/ 89034:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-var concatMap = __nccwpck_require__(97087);
-var balanced = __nccwpck_require__(59380);
-
-module.exports = expandTop;
-
-var escSlash = '\0SLASH'+Math.random()+'\0';
-var escOpen = '\0OPEN'+Math.random()+'\0';
-var escClose = '\0CLOSE'+Math.random()+'\0';
-var escComma = '\0COMMA'+Math.random()+'\0';
-var escPeriod = '\0PERIOD'+Math.random()+'\0';
-
-function numeric(str) {
-  return parseInt(str, 10) == str
-    ? parseInt(str, 10)
-    : str.charCodeAt(0);
-}
-
-function escapeBraces(str) {
-  return str.split('\\\\').join(escSlash)
-            .split('\\{').join(escOpen)
-            .split('\\}').join(escClose)
-            .split('\\,').join(escComma)
-            .split('\\.').join(escPeriod);
-}
-
-function unescapeBraces(str) {
-  return str.split(escSlash).join('\\')
-            .split(escOpen).join('{')
-            .split(escClose).join('}')
-            .split(escComma).join(',')
-            .split(escPeriod).join('.');
-}
-
-
-// Basically just str.split(","), but handling cases
-// where we have nested braced sections, which should be
-// treated as individual members, like {a,{b,c},d}
-function parseCommaParts(str) {
-  if (!str)
-    return [''];
-
-  var parts = [];
-  var m = balanced('{', '}', str);
-
-  if (!m)
-    return str.split(',');
-
-  var pre = m.pre;
-  var body = m.body;
-  var post = m.post;
-  var p = pre.split(',');
-
-  p[p.length-1] += '{' + body + '}';
-  var postParts = parseCommaParts(post);
-  if (post.length) {
-    p[p.length-1] += postParts.shift();
-    p.push.apply(p, postParts);
-  }
-
-  parts.push.apply(parts, p);
-
-  return parts;
-}
-
-function expandTop(str, options) {
-  if (!str)
-    return [];
-
-  options = options || {};
-  var max = options.max == null ? Infinity : options.max;
-
-  // I don't know why Bash 4.3 does this, but it does.
-  // Anything starting with {} will have the first two bytes preserved
-  // but *only* at the top level, so {},a}b will not expand to anything,
-  // but a{},b}c will be expanded to [a}c,abc].
-  // One could argue that this is a bug in Bash, but since the goal of
-  // this module is to match Bash's rules, we escape a leading {}
-  if (str.substr(0, 2) === '{}') {
-    str = '\\{\\}' + str.substr(2);
-  }
-
-  return expand(escapeBraces(str), max, true).map(unescapeBraces);
-}
-
-function identity(e) {
-  return e;
-}
-
-function embrace(str) {
-  return '{' + str + '}';
-}
-function isPadded(el) {
-  return /^-?0\d/.test(el);
-}
-
-function lte(i, y) {
-  return i <= y;
-}
-function gte(i, y) {
-  return i >= y;
-}
-
-function expand(str, max, isTop) {
-  var expansions = [];
-
-  // The `{a},b}` rewrite below restarts expansion on a rewritten string with
-  // the same `max` and `isTop = true`. Loop instead of recursing so a long run
-  // of non-expanding `{}` groups can't exhaust the call stack.
-  for (;;) {
-    var m = balanced('{', '}', str);
-    if (!m || /\$$/.test(m.pre)) return [str];
-
-    var isNumericSequence = /^-?\d+\.\.-?\d+(?:\.\.-?\d+)?$/.test(m.body);
-    var isAlphaSequence = /^[a-zA-Z]\.\.[a-zA-Z](?:\.\.-?\d+)?$/.test(m.body);
-    var isSequence = isNumericSequence || isAlphaSequence;
-    var isOptions = m.body.indexOf(',') >= 0;
-    if (!isSequence && !isOptions) {
-      // {a},b}
-      if (m.post.match(/,(?!,).*\}/)) {
-        str = m.pre + '{' + m.body + escClose + m.post;
-        isTop = true
-        continue
-      }
-      return [str];
-    }
-
-    var n;
-    if (isSequence) {
-      n = m.body.split(/\.\./);
-    } else {
-      n = parseCommaParts(m.body);
-      if (n.length === 1) {
-        // x{{a,b}}y ==> x{a}y x{b}y
-        n = expand(n[0], max, false).map(embrace);
-        if (n.length === 1) {
-          var post = m.post.length
-            ? expand(m.post, max, false)
-            : [''];
-          return post.map(function(p) {
-            return m.pre + n[0] + p;
-          });
-        }
-      }
-    }
-
-    // at this point, n is the parts, and we know it's not a comma set
-    // with a single entry.
-
-    // no need to expand pre, since it is guaranteed to be free of brace-sets
-    var pre = m.pre;
-    var post = m.post.length
-      ? expand(m.post, max, false)
-      : [''];
-
-    var N;
-
-    if (isSequence) {
-      var x = numeric(n[0]);
-      var y = numeric(n[1]);
-      var width = Math.max(n[0].length, n[1].length)
-      var incr = n.length == 3
-        ? Math.max(Math.abs(numeric(n[2])), 1)
-        : 1;
-      var test = lte;
-      var reverse = y < x;
-      if (reverse) {
-        incr *= -1;
-        test = gte;
-      }
-      var pad = n.some(isPadded);
-
-      N = [];
-
-      for (var i = x; test(i, y) && N.length < max; i += incr) {
-        var c;
-        if (isAlphaSequence) {
-          c = String.fromCharCode(i);
-          if (c === '\\')
-            c = '';
-        } else {
-          c = String(i);
-          if (pad) {
-            var need = width - c.length;
-            if (need > 0) {
-              var z = new Array(need + 1).join('0');
-              if (i < 0)
-                c = '-' + z + c.slice(1);
-              else
-                c = z + c;
-            }
-          }
-        }
-        N.push(c);
-      }
-    } else {
-      N = concatMap(n, function(el) { return expand(el, max, false) });
-    }
-
-    for (var j = 0; j < N.length; j++) {
-      for (var k = 0; k < post.length && expansions.length < max; k++) {
-        var expansion = pre + N[j] + post[k];
-        if (!isTop || isSequence || expansion)
-          expansions.push(expansion);
-      }
-    }
-
-    return expansions;
-  }
-}
-
-
-/***/ }),
-
-/***/ 29526:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-module.exports = minimatch
-minimatch.Minimatch = Minimatch
-
-var path = (function () { try { return __nccwpck_require__(16928) } catch (e) {}}()) || {
-  sep: '/'
-}
-minimatch.sep = path.sep
-
-var GLOBSTAR = minimatch.GLOBSTAR = Minimatch.GLOBSTAR = {}
-var expand = __nccwpck_require__(89034)
-
-var plTypes = {
-  '!': { open: '(?:(?!(?:', close: '))[^/]*?)'},
-  '?': { open: '(?:', close: ')?' },
-  '+': { open: '(?:', close: ')+' },
-  '*': { open: '(?:', close: ')*' },
-  '@': { open: '(?:', close: ')' }
-}
-
-// any single thing other than /
-// don't need to escape / when using new RegExp()
-var qmark = '[^/]'
-
-// * => any number of characters
-var star = qmark + '*?'
-
-// ** when dots are allowed.  Anything goes, except .. and .
-// not (^ or / followed by one or two dots followed by $ or /),
-// followed by anything, any number of times.
-var twoStarDot = '(?:(?!(?:\\\/|^)(?:\\.{1,2})($|\\\/)).)*?'
-
-// not a ^ or / followed by a dot,
-// followed by anything, any number of times.
-var twoStarNoDot = '(?:(?!(?:\\\/|^)\\.).)*?'
-
-// characters that need to be escaped in RegExp.
-var reSpecials = charSet('().*{}+?[]^$\\!')
-
-// "abc" -> { a:true, b:true, c:true }
-function charSet (s) {
-  return s.split('').reduce(function (set, c) {
-    set[c] = true
-    return set
-  }, {})
-}
-
-// normalizes slashes.
-var slashSplit = /\/+/
-
-minimatch.filter = filter
-function filter (pattern, options) {
-  options = options || {}
-  return function (p, i, list) {
-    return minimatch(p, pattern, options)
-  }
-}
-
-function ext (a, b) {
-  b = b || {}
-  var t = {}
-  Object.keys(a).forEach(function (k) {
-    t[k] = a[k]
-  })
-  Object.keys(b).forEach(function (k) {
-    t[k] = b[k]
-  })
-  return t
-}
-
-minimatch.defaults = function (def) {
-  if (!def || typeof def !== 'object' || !Object.keys(def).length) {
-    return minimatch
-  }
-
-  var orig = minimatch
-
-  var m = function minimatch (p, pattern, options) {
-    return orig(p, pattern, ext(def, options))
-  }
-
-  m.Minimatch = function Minimatch (pattern, options) {
-    return new orig.Minimatch(pattern, ext(def, options))
-  }
-  m.Minimatch.defaults = function defaults (options) {
-    return orig.defaults(ext(def, options)).Minimatch
-  }
-
-  m.filter = function filter (pattern, options) {
-    return orig.filter(pattern, ext(def, options))
-  }
-
-  m.defaults = function defaults (options) {
-    return orig.defaults(ext(def, options))
-  }
-
-  m.makeRe = function makeRe (pattern, options) {
-    return orig.makeRe(pattern, ext(def, options))
-  }
-
-  m.braceExpand = function braceExpand (pattern, options) {
-    return orig.braceExpand(pattern, ext(def, options))
-  }
-
-  m.match = function (list, pattern, options) {
-    return orig.match(list, pattern, ext(def, options))
-  }
-
-  return m
-}
-
-Minimatch.defaults = function (def) {
-  return minimatch.defaults(def).Minimatch
-}
-
-function minimatch (p, pattern, options) {
-  assertValidPattern(pattern)
-
-  if (!options) options = {}
-
-  // shortcut: comments match nothing.
-  if (!options.nocomment && pattern.charAt(0) === '#') {
-    return false
-  }
-
-  return new Minimatch(pattern, options).match(p)
-}
-
-function Minimatch (pattern, options) {
-  if (!(this instanceof Minimatch)) {
-    return new Minimatch(pattern, options)
-  }
-
-  assertValidPattern(pattern)
-
-  if (!options) options = {}
-
-  pattern = pattern.trim()
-
-  // windows support: need to use /, not \
-  if (!options.allowWindowsEscape && path.sep !== '/') {
-    pattern = pattern.split(path.sep).join('/')
-  }
-
-  this.options = options
-  this.maxGlobstarRecursion = options.maxGlobstarRecursion !== undefined
-    ? options.maxGlobstarRecursion : 200
-  this.set = []
-  this.pattern = pattern
-  this.regexp = null
-  this.negate = false
-  this.comment = false
-  this.empty = false
-  this.partial = !!options.partial
-
-  // make the set of regexps etc.
-  this.make()
-}
-
-Minimatch.prototype.debug = function () {}
-
-Minimatch.prototype.make = make
-function make () {
-  var pattern = this.pattern
-  var options = this.options
-
-  // empty patterns and comments match nothing.
-  if (!options.nocomment && pattern.charAt(0) === '#') {
-    this.comment = true
-    return
-  }
-  if (!pattern) {
-    this.empty = true
-    return
-  }
-
-  // step 1: figure out negation, etc.
-  this.parseNegate()
-
-  // step 2: expand braces
-  var set = this.globSet = this.braceExpand()
-
-  if (options.debug) this.debug = function debug() { console.error.apply(console, arguments) }
-
-  this.debug(this.pattern, set)
-
-  // step 3: now we have a set, so turn each one into a series of path-portion
-  // matching patterns.
-  // These will be regexps, except in the case of "**", which is
-  // set to the GLOBSTAR object for globstar behavior,
-  // and will not contain any / characters
-  set = this.globParts = set.map(function (s) {
-    return s.split(slashSplit)
-  })
-
-  this.debug(this.pattern, set)
-
-  // glob --> regexps
-  set = set.map(function (s, si, set) {
-    return s.map(this.parse, this)
-  }, this)
-
-  this.debug(this.pattern, set)
-
-  // filter out everything that didn't compile properly.
-  set = set.filter(function (s) {
-    return s.indexOf(false) === -1
-  })
-
-  this.debug(this.pattern, set)
-
-  this.set = set
-}
-
-Minimatch.prototype.parseNegate = parseNegate
-function parseNegate () {
-  var pattern = this.pattern
-  var negate = false
-  var options = this.options
-  var negateOffset = 0
-
-  if (options.nonegate) return
-
-  for (var i = 0, l = pattern.length
-    ; i < l && pattern.charAt(i) === '!'
-    ; i++) {
-    negate = !negate
-    negateOffset++
-  }
-
-  if (negateOffset) this.pattern = pattern.substr(negateOffset)
-  this.negate = negate
-}
-
-// Brace expansion:
-// a{b,c}d -> abd acd
-// a{b,}c -> abc ac
-// a{0..3}d -> a0d a1d a2d a3d
-// a{b,c{d,e}f}g -> abg acdfg acefg
-// a{b,c}d{e,f}g -> abdeg acdeg abdeg abdfg
-//
-// Invalid sets are not expanded.
-// a{2..}b -> a{2..}b
-// a{b}c -> a{b}c
-minimatch.braceExpand = function (pattern, options) {
-  return braceExpand(pattern, options)
-}
-
-Minimatch.prototype.braceExpand = braceExpand
-
-function braceExpand (pattern, options) {
-  if (!options) {
-    if (this instanceof Minimatch) {
-      options = this.options
-    } else {
-      options = {}
-    }
-  }
-
-  pattern = typeof pattern === 'undefined'
-    ? this.pattern : pattern
-
-  assertValidPattern(pattern)
-
-  // Thanks to Yeting Li <https://github.com/yetingli> for
-  // improving this regexp to avoid a ReDOS vulnerability.
-  if (options.nobrace || !/\{(?:(?!\{).)*\}/.test(pattern)) {
-    // shortcut. no need to expand.
-    return [pattern]
-  }
-
-  return expand(pattern)
-}
-
-var MAX_PATTERN_LENGTH = 1024 * 64
-var assertValidPattern = function (pattern) {
-  if (typeof pattern !== 'string') {
-    throw new TypeError('invalid pattern')
-  }
-
-  if (pattern.length > MAX_PATTERN_LENGTH) {
-    throw new TypeError('pattern is too long')
-  }
-}
-
-// parse a component of the expanded set.
-// At this point, no pattern may contain "/" in it
-// so we're going to return a 2d array, where each entry is the full
-// pattern, split on '/', and then turned into a regular expression.
-// A regexp is made at the end which joins each array with an
-// escaped /, and another full one which joins each regexp with |.
-//
-// Following the lead of Bash 4.1, note that "**" only has special meaning
-// when it is the *only* thing in a path portion.  Otherwise, any series
-// of * is equivalent to a single *.  Globstar behavior is enabled by
-// default, and can be disabled by setting options.noglobstar.
-Minimatch.prototype.parse = parse
-var SUBPARSE = {}
-function parse (pattern, isSub) {
-  assertValidPattern(pattern)
-
-  var options = this.options
-
-  // shortcuts
-  if (pattern === '**') {
-    if (!options.noglobstar)
-      return GLOBSTAR
-    else
-      pattern = '*'
-  }
-  if (pattern === '') return ''
-
-  var re = ''
-  var hasMagic = !!options.nocase
-  var escaping = false
-  // ? => one single character
-  var patternListStack = []
-  var negativeLists = []
-  var stateChar
-  var inClass = false
-  var reClassStart = -1
-  var classStart = -1
-  // . and .. never match anything that doesn't start with .,
-  // even when options.dot is set.
-  var patternStart = pattern.charAt(0) === '.' ? '' // anything
-  // not (start or / followed by . or .. followed by / or end)
-  : options.dot ? '(?!(?:^|\\\/)\\.{1,2}(?:$|\\\/))'
-  : '(?!\\.)'
-  var self = this
-
-  function clearStateChar () {
-    if (stateChar) {
-      // we had some state-tracking character
-      // that wasn't consumed by this pass.
-      switch (stateChar) {
-        case '*':
-          re += star
-          hasMagic = true
-        break
-        case '?':
-          re += qmark
-          hasMagic = true
-        break
-        default:
-          re += '\\' + stateChar
-        break
-      }
-      self.debug('clearStateChar %j %j', stateChar, re)
-      stateChar = false
-    }
-  }
-
-  for (var i = 0, len = pattern.length, c
-    ; (i < len) && (c = pattern.charAt(i))
-    ; i++) {
-    this.debug('%s\t%s %s %j', pattern, i, re, c)
-
-    // skip over any that are escaped.
-    if (escaping && reSpecials[c]) {
-      re += '\\' + c
-      escaping = false
-      continue
-    }
-
-    switch (c) {
-      /* istanbul ignore next */
-      case '/': {
-        // completely not allowed, even escaped.
-        // Should already be path-split by now.
-        return false
-      }
-
-      case '\\':
-        clearStateChar()
-        escaping = true
-      continue
-
-      // the various stateChar values
-      // for the "extglob" stuff.
-      case '?':
-      case '*':
-      case '+':
-      case '@':
-      case '!':
-        this.debug('%s\t%s %s %j <-- stateChar', pattern, i, re, c)
-
-        // all of those are literals inside a class, except that
-        // the glob [!a] means [^a] in regexp
-        if (inClass) {
-          this.debug('  in class')
-          if (c === '!' && i === classStart + 1) c = '^'
-          re += c
-          continue
-        }
-
-        // coalesce consecutive non-globstar * characters
-        if (c === '*' && stateChar === '*') continue
-
-        // if we already have a stateChar, then it means
-        // that there was something like ** or +? in there.
-        // Handle the stateChar, then proceed with this one.
-        self.debug('call clearStateChar %j', stateChar)
-        clearStateChar()
-        stateChar = c
-        // if extglob is disabled, then +(asdf|foo) isn't a thing.
-        // just clear the statechar *now*, rather than even diving into
-        // the patternList stuff.
-        if (options.noext) clearStateChar()
-      continue
-
-      case '(':
-        if (inClass) {
-          re += '('
-          continue
-        }
-
-        if (!stateChar) {
-          re += '\\('
-          continue
-        }
-
-        patternListStack.push({
-          type: stateChar,
-          start: i - 1,
-          reStart: re.length,
-          open: plTypes[stateChar].open,
-          close: plTypes[stateChar].close
-        })
-        // negation is (?:(?!js)[^/]*)
-        re += stateChar === '!' ? '(?:(?!(?:' : '(?:'
-        this.debug('plType %j %j', stateChar, re)
-        stateChar = false
-      continue
-
-      case ')':
-        if (inClass || !patternListStack.length) {
-          re += '\\)'
-          continue
-        }
-
-        clearStateChar()
-        hasMagic = true
-        var pl = patternListStack.pop()
-        // negation is (?:(?!js)[^/]*)
-        // The others are (?:<pattern>)<type>
-        re += pl.close
-        if (pl.type === '!') {
-          negativeLists.push(pl)
-        }
-        pl.reEnd = re.length
-      continue
-
-      case '|':
-        if (inClass || !patternListStack.length || escaping) {
-          re += '\\|'
-          escaping = false
-          continue
-        }
-
-        clearStateChar()
-        re += '|'
-      continue
-
-      // these are mostly the same in regexp and glob
-      case '[':
-        // swallow any state-tracking char before the [
-        clearStateChar()
-
-        if (inClass) {
-          re += '\\' + c
-          continue
-        }
-
-        inClass = true
-        classStart = i
-        reClassStart = re.length
-        re += c
-      continue
-
-      case ']':
-        //  a right bracket shall lose its special
-        //  meaning and represent itself in
-        //  a bracket expression if it occurs
-        //  first in the list.  -- POSIX.2 2.8.3.2
-        if (i === classStart + 1 || !inClass) {
-          re += '\\' + c
-          escaping = false
-          continue
-        }
-
-        // handle the case where we left a class open.
-        // "[z-a]" is valid, equivalent to "\[z-a\]"
-        // split where the last [ was, make sure we don't have
-        // an invalid re. if so, re-walk the contents of the
-        // would-be class to re-translate any characters that
-        // were passed through as-is
-        // TODO: It would probably be faster to determine this
-        // without a try/catch and a new RegExp, but it's tricky
-        // to do safely.  For now, this is safe and works.
-        var cs = pattern.substring(classStart + 1, i)
-        try {
-          RegExp('[' + cs + ']')
-        } catch (er) {
-          // not a valid class!
-          var sp = this.parse(cs, SUBPARSE)
-          re = re.substr(0, reClassStart) + '\\[' + sp[0] + '\\]'
-          hasMagic = hasMagic || sp[1]
-          inClass = false
-          continue
-        }
-
-        // finish up the class.
-        hasMagic = true
-        inClass = false
-        re += c
-      continue
-
-      default:
-        // swallow any state char that wasn't consumed
-        clearStateChar()
-
-        if (escaping) {
-          // no need
-          escaping = false
-        } else if (reSpecials[c]
-          && !(c === '^' && inClass)) {
-          re += '\\'
-        }
-
-        re += c
-
-    } // switch
-  } // for
-
-  // handle the case where we left a class open.
-  // "[abc" is valid, equivalent to "\[abc"
-  if (inClass) {
-    // split where the last [ was, and escape it
-    // this is a huge pita.  We now have to re-walk
-    // the contents of the would-be class to re-translate
-    // any characters that were passed through as-is
-    cs = pattern.substr(classStart + 1)
-    sp = this.parse(cs, SUBPARSE)
-    re = re.substr(0, reClassStart) + '\\[' + sp[0]
-    hasMagic = hasMagic || sp[1]
-  }
-
-  // handle the case where we had a +( thing at the *end*
-  // of the pattern.
-  // each pattern list stack adds 3 chars, and we need to go through
-  // and escape any | chars that were passed through as-is for the regexp.
-  // Go through and escape them, taking care not to double-escape any
-  // | chars that were already escaped.
-  for (pl = patternListStack.pop(); pl; pl = patternListStack.pop()) {
-    var tail = re.slice(pl.reStart + pl.open.length)
-    this.debug('setting tail', re, pl)
-    // maybe some even number of \, then maybe 1 \, followed by a |
-    tail = tail.replace(/((?:\\{2}){0,64})(\\?)\|/g, function (_, $1, $2) {
-      if (!$2) {
-        // the | isn't already escaped, so escape it.
-        $2 = '\\'
-      }
-
-      // need to escape all those slashes *again*, without escaping the
-      // one that we need for escaping the | character.  As it works out,
-      // escaping an even number of slashes can be done by simply repeating
-      // it exactly after itself.  That's why this trick works.
-      //
-      // I am sorry that you have to see this.
-      return $1 + $1 + $2 + '|'
-    })
-
-    this.debug('tail=%j\n   %s', tail, tail, pl, re)
-    var t = pl.type === '*' ? star
-      : pl.type === '?' ? qmark
-      : '\\' + pl.type
-
-    hasMagic = true
-    re = re.slice(0, pl.reStart) + t + '\\(' + tail
-  }
-
-  // handle trailing things that only matter at the very end.
-  clearStateChar()
-  if (escaping) {
-    // trailing \\
-    re += '\\\\'
-  }
-
-  // only need to apply the nodot start if the re starts with
-  // something that could conceivably capture a dot
-  var addPatternStart = false
-  switch (re.charAt(0)) {
-    case '[': case '.': case '(': addPatternStart = true
-  }
-
-  // Hack to work around lack of negative lookbehind in JS
-  // A pattern like: *.!(x).!(y|z) needs to ensure that a name
-  // like 'a.xyz.yz' doesn't match.  So, the first negative
-  // lookahead, has to look ALL the way ahead, to the end of
-  // the pattern.
-  for (var n = negativeLists.length - 1; n > -1; n--) {
-    var nl = negativeLists[n]
-
-    var nlBefore = re.slice(0, nl.reStart)
-    var nlFirst = re.slice(nl.reStart, nl.reEnd - 8)
-    var nlLast = re.slice(nl.reEnd - 8, nl.reEnd)
-    var nlAfter = re.slice(nl.reEnd)
-
-    nlLast += nlAfter
-
-    // Handle nested stuff like *(*.js|!(*.json)), where open parens
-    // mean that we should *not* include the ) in the bit that is considered
-    // "after" the negated section.
-    var openParensBefore = nlBefore.split('(').length - 1
-    var cleanAfter = nlAfter
-    for (i = 0; i < openParensBefore; i++) {
-      cleanAfter = cleanAfter.replace(/\)[+*?]?/, '')
-    }
-    nlAfter = cleanAfter
-
-    var dollar = ''
-    if (nlAfter === '' && isSub !== SUBPARSE) {
-      dollar = '$'
-    }
-    var newRe = nlBefore + nlFirst + nlAfter + dollar + nlLast
-    re = newRe
-  }
-
-  // if the re is not "" at this point, then we need to make sure
-  // it doesn't match against an empty path part.
-  // Otherwise a/* will match a/, which it should not.
-  if (re !== '' && hasMagic) {
-    re = '(?=.)' + re
-  }
-
-  if (addPatternStart) {
-    re = patternStart + re
-  }
-
-  // parsing just a piece of a larger pattern.
-  if (isSub === SUBPARSE) {
-    return [re, hasMagic]
-  }
-
-  // skip the regexp for non-magical patterns
-  // unescape anything in it, though, so that it'll be
-  // an exact match against a file etc.
-  if (!hasMagic) {
-    return globUnescape(pattern)
-  }
-
-  var flags = options.nocase ? 'i' : ''
-  try {
-    var regExp = new RegExp('^' + re + '$', flags)
-  } catch (er) /* istanbul ignore next - should be impossible */ {
-    // If it was an invalid regular expression, then it can't match
-    // anything.  This trick looks for a character after the end of
-    // the string, which is of course impossible, except in multi-line
-    // mode, but it's not a /m regex.
-    return new RegExp('$.')
-  }
-
-  regExp._glob = pattern
-  regExp._src = re
-
-  return regExp
-}
-
-minimatch.makeRe = function (pattern, options) {
-  return new Minimatch(pattern, options || {}).makeRe()
-}
-
-Minimatch.prototype.makeRe = makeRe
-function makeRe () {
-  if (this.regexp || this.regexp === false) return this.regexp
-
-  // at this point, this.set is a 2d array of partial
-  // pattern strings, or "**".
-  //
-  // It's better to use .match().  This function shouldn't
-  // be used, really, but it's pretty convenient sometimes,
-  // when you just want to work with a regex.
-  var set = this.set
-
-  if (!set.length) {
-    this.regexp = false
-    return this.regexp
-  }
-  var options = this.options
-
-  var twoStar = options.noglobstar ? star
-    : options.dot ? twoStarDot
-    : twoStarNoDot
-  var flags = options.nocase ? 'i' : ''
-
-  var re = set.map(function (pattern) {
-    return pattern.map(function (p) {
-      return (p === GLOBSTAR) ? twoStar
-      : (typeof p === 'string') ? regExpEscape(p)
-      : p._src
-    }).join('\\\/')
-  }).join('|')
-
-  // must match entire pattern
-  // ending in a * or ** will make it less strict.
-  re = '^(?:' + re + ')$'
-
-  // can match anything, as long as it's not this.
-  if (this.negate) re = '^(?!' + re + ').*$'
-
-  try {
-    this.regexp = new RegExp(re, flags)
-  } catch (ex) /* istanbul ignore next - should be impossible */ {
-    this.regexp = false
-  }
-  return this.regexp
-}
-
-minimatch.match = function (list, pattern, options) {
-  options = options || {}
-  var mm = new Minimatch(pattern, options)
-  list = list.filter(function (f) {
-    return mm.match(f)
-  })
-  if (mm.options.nonull && !list.length) {
-    list.push(pattern)
-  }
-  return list
-}
-
-Minimatch.prototype.match = function match (f, partial) {
-  if (typeof partial === 'undefined') partial = this.partial
-  this.debug('match', f, this.pattern)
-  // short-circuit in the case of busted things.
-  // comments, etc.
-  if (this.comment) return false
-  if (this.empty) return f === ''
-
-  if (f === '/' && partial) return true
-
-  var options = this.options
-
-  // windows: need to use /, not \
-  if (path.sep !== '/') {
-    f = f.split(path.sep).join('/')
-  }
-
-  // treat the test path as a set of pathparts.
-  f = f.split(slashSplit)
-  this.debug(this.pattern, 'split', f)
-
-  // just ONE of the pattern sets in this.set needs to match
-  // in order for it to be valid.  If negating, then just one
-  // match means that we have failed.
-  // Either way, return on the first hit.
-
-  var set = this.set
-  this.debug(this.pattern, 'set', set)
-
-  // Find the basename of the path by looking for the last non-empty segment
-  var filename
-  var i
-  for (i = f.length - 1; i >= 0; i--) {
-    filename = f[i]
-    if (filename) break
-  }
-
-  for (i = 0; i < set.length; i++) {
-    var pattern = set[i]
-    var file = f
-    if (options.matchBase && pattern.length === 1) {
-      file = [filename]
-    }
-    var hit = this.matchOne(file, pattern, partial)
-    if (hit) {
-      if (options.flipNegate) return true
-      return !this.negate
-    }
-  }
-
-  // didn't get any hits.  this is success if it's a negative
-  // pattern, failure otherwise.
-  if (options.flipNegate) return false
-  return this.negate
-}
-
-// set partial to true to test if, for example,
-// "/a/b" matches the start of "/*/b/*/d"
-// Partial means, if you run out of file before you run
-// out of pattern, then that's fine, as long as all
-// the parts match.
-Minimatch.prototype.matchOne = function (file, pattern, partial) {
-  if (pattern.indexOf(GLOBSTAR) !== -1) {
-    return this._matchGlobstar(file, pattern, partial, 0, 0)
-  }
-  return this._matchOne(file, pattern, partial, 0, 0)
-}
-
-Minimatch.prototype._matchGlobstar = function (file, pattern, partial, fileIndex, patternIndex) {
-  var i
-
-  // find first globstar from patternIndex
-  var firstgs = -1
-  for (i = patternIndex; i < pattern.length; i++) {
-    if (pattern[i] === GLOBSTAR) { firstgs = i; break }
-  }
-
-  // find last globstar
-  var lastgs = -1
-  for (i = pattern.length - 1; i >= 0; i--) {
-    if (pattern[i] === GLOBSTAR) { lastgs = i; break }
-  }
-
-  var head = pattern.slice(patternIndex, firstgs)
-  var body = partial ? pattern.slice(firstgs + 1) : pattern.slice(firstgs + 1, lastgs)
-  var tail = partial ? [] : pattern.slice(lastgs + 1)
-
-  // check the head
-  if (head.length) {
-    var fileHead = file.slice(fileIndex, fileIndex + head.length)
-    if (!this._matchOne(fileHead, head, partial, 0, 0)) {
-      return false
-    }
-    fileIndex += head.length
-  }
-
-  // check the tail
-  var fileTailMatch = 0
-  if (tail.length) {
-    if (tail.length + fileIndex > file.length) return false
-
-    var tailStart = file.length - tail.length
-    if (this._matchOne(file, tail, partial, tailStart, 0)) {
-      fileTailMatch = tail.length
-    } else {
-      // affordance for stuff like a/**/* matching a/b/
-      if (file[file.length - 1] !== '' ||
-          fileIndex + tail.length === file.length) {
-        return false
-      }
-      tailStart--
-      if (!this._matchOne(file, tail, partial, tailStart, 0)) {
-        return false
-      }
-      fileTailMatch = tail.length + 1
-    }
-  }
-
-  // if body is empty (single ** between head and tail)
-  if (!body.length) {
-    var sawSome = !!fileTailMatch
-    for (i = fileIndex; i < file.length - fileTailMatch; i++) {
-      var f = String(file[i])
-      sawSome = true
-      if (f === '.' || f === '..' ||
-          (!this.options.dot && f.charAt(0) === '.')) {
-        return false
-      }
-    }
-    return partial || sawSome
-  }
-
-  // split body into segments at each GLOBSTAR
-  var bodySegments = [[[], 0]]
-  var currentBody = bodySegments[0]
-  var nonGsParts = 0
-  var nonGsPartsSums = [0]
-  for (var bi = 0; bi < body.length; bi++) {
-    var b = body[bi]
-    if (b === GLOBSTAR) {
-      nonGsPartsSums.push(nonGsParts)
-      currentBody = [[], 0]
-      bodySegments.push(currentBody)
-    } else {
-      currentBody[0].push(b)
-      nonGsParts++
-    }
-  }
-
-  var idx = bodySegments.length - 1
-  var fileLength = file.length - fileTailMatch
-  for (var si = 0; si < bodySegments.length; si++) {
-    bodySegments[si][1] = fileLength -
-      (nonGsPartsSums[idx--] + bodySegments[si][0].length)
-  }
-
-  return !!this._matchGlobStarBodySections(
-    file, bodySegments, fileIndex, 0, partial, 0, !!fileTailMatch
-  )
-}
-
-// return false for "nope, not matching"
-// return null for "not matching, cannot keep trying"
-Minimatch.prototype._matchGlobStarBodySections = function (
-  file, bodySegments, fileIndex, bodyIndex, partial, globStarDepth, sawTail
-) {
-  var bs = bodySegments[bodyIndex]
-  if (!bs) {
-    // just make sure there are no bad dots
-    for (var i = fileIndex; i < file.length; i++) {
-      sawTail = true
-      var f = file[i]
-      if (f === '.' || f === '..' ||
-          (!this.options.dot && f.charAt(0) === '.')) {
-        return false
-      }
-    }
-    return sawTail
-  }
-
-  var body = bs[0]
-  var after = bs[1]
-  while (fileIndex <= after) {
-    var m = this._matchOne(
-      file.slice(0, fileIndex + body.length),
-      body,
-      partial,
-      fileIndex,
-      0
-    )
-    // if limit exceeded, no match. intentional false negative,
-    // acceptable break in correctness for security.
-    if (m && globStarDepth < this.maxGlobstarRecursion) {
-      var sub = this._matchGlobStarBodySections(
-        file, bodySegments,
-        fileIndex + body.length, bodyIndex + 1,
-        partial, globStarDepth + 1, sawTail
-      )
-      if (sub !== false) {
-        return sub
-      }
-    }
-    var f = file[fileIndex]
-    if (f === '.' || f === '..' ||
-        (!this.options.dot && f.charAt(0) === '.')) {
-      return false
-    }
-    fileIndex++
-  }
-  return partial || null
-}
-
-Minimatch.prototype._matchOne = function (file, pattern, partial, fileIndex, patternIndex) {
-  var fi, pi, fl, pl
-  for (
-    fi = fileIndex, pi = patternIndex, fl = file.length, pl = pattern.length
-    ; (fi < fl) && (pi < pl)
-    ; fi++, pi++
-  ) {
-    this.debug('matchOne loop')
-    var p = pattern[pi]
-    var f = file[fi]
-
-    this.debug(pattern, p, f)
-
-    // should be impossible.
-    // some invalid regexp stuff in the set.
-    /* istanbul ignore if */
-    if (p === false || p === GLOBSTAR) return false
-
-    // something other than **
-    // non-magic patterns just have to match exactly
-    // patterns with magic have been turned into regexps.
-    var hit
-    if (typeof p === 'string') {
-      hit = f === p
-      this.debug('string match', p, f, hit)
-    } else {
-      hit = f.match(p)
-      this.debug('pattern match', p, f, hit)
-    }
-
-    if (!hit) return false
-  }
-
-  // now either we fell off the end of the pattern, or we're done.
-  if (fi === fl && pi === pl) {
-    // ran out of pattern and filename at the same time.
-    // an exact hit!
-    return true
-  } else if (fi === fl) {
-    // ran out of file, but still had pattern left.
-    // this is ok if we're doing the match as part of
-    // a glob fs traversal.
-    return partial
-  } else /* istanbul ignore else */ if (pi === pl) {
-    // ran out of pattern, still have file left.
-    // this is only acceptable if we're on the very last
-    // empty segment of a file with a trailing slash.
-    // a/* should match a/b/
-    return (fi === fl - 1) && (file[fi] === '')
-  }
-
-  // should be unreachable.
-  /* istanbul ignore next */
-  throw new Error('wtf?')
-}
-
-// replace stuff like \* with *
-function globUnescape (s) {
-  return s.replace(/\\(.)/g, '$1')
-}
-
-function regExpEscape (s) {
-  return s.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')
-}
-
-
-/***/ }),
-
 /***/ 15648:
 /***/ ((__unused_webpack_module, exports) => {
 
@@ -4102,6 +2874,29 @@ exports.AsyncLocalStorageContextManager = void 0;
 const api_1 = __nccwpck_require__(63914);
 const async_hooks_1 = __nccwpck_require__(90290);
 const AbstractAsyncHooksContextManager_1 = __nccwpck_require__(68753);
+/**
+ * Wrapper around a token and _asyncLocalStorage to mirror the behavior of
+ * a Node.js RunScope
+ *
+ * @internal not intended for direct public consumption. Will be removed once
+ * withScope is available on all supported Node.js versions
+ */
+class DisposeOnceToken {
+    _isDisposed = false;
+    _previousContext;
+    _asyncLocalStorage;
+    constructor(previousContext, asyncLocalStorage) {
+        this._previousContext = previousContext;
+        this._asyncLocalStorage = asyncLocalStorage;
+    }
+    dispose() {
+        if (this._isDisposed) {
+            return;
+        }
+        this._asyncLocalStorage.enterWith(this._previousContext);
+        this._isDisposed = true;
+    }
+}
 class AsyncLocalStorageContextManager extends AbstractAsyncHooksContextManager_1.AbstractAsyncHooksContextManager {
     _asyncLocalStorage;
     constructor() {
@@ -4121,6 +2916,35 @@ class AsyncLocalStorageContextManager extends AbstractAsyncHooksContextManager_1
     disable() {
         this._asyncLocalStorage.disable();
         return this;
+    }
+    /**
+     * Imperatively sets `context` as active for the current async execution chain
+     * and operations spawned from it. Returns a {@link ContextManagementToken} whose `dispose()`
+     * restores the previous context (see {@link ContextManager.attach}).
+     *
+     * On Node.js 25.9+, delegates to `AsyncLocalStorage.withScope()` which returns
+     * a native `RunScope`. On older Node.js versions, falls back to `enterWith()` with
+     * a manual token.
+     *
+     * **Caveat for async functions:** Both `withScope()` and `enterWith()` affect the
+     * entire current async execution chain. If `attach()` is called inside an async
+     * function before the first `await`, the context change will leak into the caller's
+     * context and remain active there until something else restores it. Prefer `with()`
+     * for async code.
+     *
+     * @experimental This API is experimental and may change in minor releases without prior notice.
+     */
+    attach(context) {
+        // Node.js 25.9+: withScope() returns a RunScope with dispose()
+        const withScope = this._asyncLocalStorage.withScope;
+        if (withScope) {
+            return withScope.call(this._asyncLocalStorage, context);
+        }
+        // Fallback for older Node.js - this can be dropped when the minimum supported
+        // Node.js version of this package is 25.9 or higher.
+        const previousContext = this.active();
+        this._asyncLocalStorage.enterWith(context);
+        return new DisposeOnceToken(previousContext, this._asyncLocalStorage);
     }
 }
 exports.AsyncLocalStorageContextManager = AsyncLocalStorageContextManager;
@@ -6124,7 +4948,7 @@ exports.isUrlIgnored = isUrlIgnored;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.VERSION = void 0;
 // this is autogenerated file, see scripts/version-update.js
-exports.VERSION = '2.10.0';
+exports.VERSION = '2.11.0';
 //# sourceMappingURL=version.js.map
 
 /***/ }),
@@ -14776,10 +13600,15 @@ const crypto_1 = __nccwpck_require__(76982);
  * ServiceInstanceIdDetector detects the resources related to the service instance ID.
  */
 class ServiceInstanceIdDetector {
+    // Multiple calls to ServiceInstanceIdDetector return the same ID.
+    _serviceInstanceId;
     detect(_config) {
+        if (!this._serviceInstanceId) {
+            this._serviceInstanceId = (0, crypto_1.randomUUID)();
+        }
         return {
             attributes: {
-                [semconv_1.ATTR_SERVICE_INSTANCE_ID]: (0, crypto_1.randomUUID)(),
+                [semconv_1.ATTR_SERVICE_INSTANCE_ID]: this._serviceInstanceId,
             },
         };
     }
@@ -28629,8 +27458,8 @@ class TracerProvider {
         }
         return this._tracers.get(key);
     }
-    forceFlush() {
-        const timeout = this._forceFlushTimeoutMillis;
+    forceFlush(options) {
+        const timeout = options?.timeoutMillis ?? this._forceFlushTimeoutMillis;
         const promises = this._activeSpanProcessor['_spanProcessors'].map((spanProcessor) => {
             return new Promise(resolve => {
                 let state;
@@ -29808,7 +28637,7 @@ exports.OTEL_COMPONENT_TYPE_VALUE_SIMPLE_SPAN_PROCESSOR = 'simple_span_processor
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.VERSION = void 0;
 // this is autogenerated file, see scripts/version-update.js
-exports.VERSION = '2.10.0';
+exports.VERSION = '2.11.0';
 //# sourceMappingURL=version.js.map
 
 /***/ }),
@@ -60391,6 +59220,395 @@ function range(a, b, str) {
 
 /***/ }),
 
+/***/ 94691:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+var concatMap = __nccwpck_require__(97087);
+var balanced = __nccwpck_require__(59380);
+
+module.exports = expandTop;
+
+var escSlash = '\0SLASH'+Math.random()+'\0';
+var escOpen = '\0OPEN'+Math.random()+'\0';
+var escClose = '\0CLOSE'+Math.random()+'\0';
+var escComma = '\0COMMA'+Math.random()+'\0';
+var escPeriod = '\0PERIOD'+Math.random()+'\0';
+
+var EXPANSION_MAX = 100000
+
+// `EXPANSION_MAX` caps the *number* of expansions, but not their length. An
+// input like `'{a,b}'.repeat(1500)` stays under that count - its output is
+// truncated to 100k results - while making every result ~1500 characters
+// long. The result set, and the intermediate arrays built while combining
+// brace sets, then grow large enough to exhaust memory and crash the process
+// (CVE-2026-14257). `EXPANSION_MAX_LENGTH` bounds the total number of
+// characters the accumulator may hold at any point, so memory stays flat no
+// matter how many brace groups are chained. The limit sits well above any
+// realistic expansion (100k results hitting `EXPANSION_MAX` measure ~1M
+// characters) so legitimate input is unaffected.
+var EXPANSION_MAX_LENGTH = 4000000
+
+function numeric(str) {
+  return parseInt(str, 10) == str
+    ? parseInt(str, 10)
+    : str.charCodeAt(0);
+}
+
+function escapeBraces(str) {
+  return str.split('\\\\').join(escSlash)
+            .split('\\{').join(escOpen)
+            .split('\\}').join(escClose)
+            .split('\\,').join(escComma)
+            .split('\\.').join(escPeriod);
+}
+
+function unescapeBraces(str) {
+  return str.split(escSlash).join('\\')
+            .split(escOpen).join('{')
+            .split(escClose).join('}')
+            .split(escComma).join(',')
+            .split(escPeriod).join('.');
+}
+
+
+// Basically just str.split(","), but handling cases
+// where we have nested braced sections, which should be
+// treated as individual members, like {a,{b,c},d}
+function parseCommaParts(str) {
+  if (!str)
+    return [''];
+
+  var parts = [];
+  var m = balanced('{', '}', str);
+
+  if (!m)
+    return str.split(',');
+
+  var pre = m.pre;
+  var body = m.body;
+  var post = m.post;
+  var p = pre.split(',');
+
+  p[p.length-1] += '{' + body + '}';
+  var postParts = parseCommaParts(post);
+  if (post.length) {
+    p[p.length-1] += postParts.shift();
+    p.push.apply(p, postParts);
+  }
+
+  parts.push.apply(parts, p);
+
+  return parts;
+}
+
+function expandTop(str, options) {
+  if (!str)
+    return [];
+
+  options = options || {};
+  var max = options.max == null ? EXPANSION_MAX : options.max;
+  var maxLength = options.maxLength == null ? EXPANSION_MAX_LENGTH : options.maxLength;
+
+  // I don't know why Bash 4.3 does this, but it does.
+  // Anything starting with {} will have the first two bytes preserved
+  // but *only* at the top level, so {},a}b will not expand to anything,
+  // but a{},b}c will be expanded to [a}c,abc].
+  // One could argue that this is a bug in Bash, but since the goal of
+  // this module is to match Bash's rules, we escape a leading {}
+  if (str.substr(0, 2) === '{}') {
+    str = '\\{\\}' + str.substr(2);
+  }
+
+  return expand(escapeBraces(str), max, maxLength, true).map(unescapeBraces);
+}
+
+function identity(e) {
+  return e;
+}
+
+function embrace(str) {
+  return '{' + str + '}';
+}
+function isPadded(el) {
+  return /^-?0\d/.test(el);
+}
+
+function lte(i, y) {
+  return i <= y;
+}
+function gte(i, y) {
+  return i >= y;
+}
+
+// Build `{ acc[a] + pre + values[v] }` for every combination, capping the
+// number of results at `max` and the total number of characters at `maxLength`.
+// This is the one place output grows, so bounding it here keeps the single
+// accumulator - and therefore memory - flat regardless of how many brace groups
+// are combined (CVE-2026-14257).
+//
+// `base[a]` is the length of the part of `acc[a]` that predates the current
+// empty-drop baseline (see `expand`). The matching baselines for the results
+// are appended to `outBase`, which the caller carries forward alongside them.
+function combine(
+  acc,
+  base,
+  pre,
+  values,
+  max,
+  maxLength,
+  dropEmpties,
+  outBase
+) {
+  var out = []
+  var length = 0
+  for (var a = 0; a < acc.length; a++) {
+    for (var v = 0; v < values.length; v++) {
+      if (out.length >= max) return out
+      var expansion = acc[a] + pre + values[v]
+      // Bash drops empty results at the top level. Skip them before they count
+      // against `max`, so `max` bounds the number of *kept* results. "Empty"
+      // means "adds nothing past the baseline", not "empty overall".
+      if (dropEmpties && expansion.length === base[a]) continue
+      if (length + expansion.length > maxLength) return out
+      out.push(expansion)
+      outBase.push(base[a])
+      length += expansion.length
+    }
+  }
+  return out
+}
+
+// The expansion values of a single numeric (`1..5`) or alphabetic (`a..e..2`)
+// sequence body.
+function expandSequence(
+  body,
+  isAlphaSequence,
+  max,
+  maxLength
+) {
+  var n = body.split(/\.\./)
+  var N = []
+  // A sequence body always splits into two or three parts, but the compiler
+  // can't know that.
+  /* c8 ignore start */
+  if (n[0] === undefined || n[1] === undefined) {
+    return N
+  }
+  /* c8 ignore stop */
+  var x = numeric(n[0])
+  var y = numeric(n[1])
+  var width = Math.max(n[0].length, n[1].length)
+  var incr =
+    n.length === 3 && n[2] !== undefined ?
+      Math.max(Math.abs(numeric(n[2])), 1)
+    : 1
+  var test = lte
+  var reverse = y < x
+  if (reverse) {
+    incr *= -1
+    test = gte
+  }
+  var pad = n.some(isPadded)
+
+  var length = 0
+  for (var i = x; test(i, y) && N.length < max; i += incr) {
+    var c
+    if (isAlphaSequence) {
+      c = String.fromCharCode(i)
+      if (c === '\\') {
+        c = ''
+      }
+    } else {
+      c = String(i)
+      if (pad) {
+        var need = width - c.length
+        if (need > 0) {
+          var z = new Array(need + 1).join('0')
+          if (i < 0) {
+            c = '-' + z + c.slice(1)
+          } else {
+            c = z + c
+          }
+        }
+      }
+    }
+    if (length + c.length > maxLength) break
+    N.push(c)
+    length += c.length
+  }
+  return N
+}
+
+function expand(
+  str,
+  max,
+  maxLength,
+  isTop
+) {
+  // Consume the string's top-level brace groups left to right, threading a
+  // running set of combined prefixes (`acc`). Expanding the tail iteratively -
+  // rather than recursing on `m.post` once per group - keeps the native stack
+  // depth constant, so deeply chained input (`'{a,b}'.repeat(3000)`) can no
+  // longer overflow the stack, and leaves a single accumulator whose size
+  // `maxLength` bounds directly (CVE-2026-14257).
+  var acc = ['']
+
+  // Bash drops empty results, but only when the *first* group of the run is a
+  // comma set - a sequence like `{a..\}` may legitimately yield ''. The drop
+  // is on the final strings, so it is applied to whichever `combine` produces
+  // them (the one with no brace set left in the tail).
+  //
+  // The old implementation recursed on `m.post`, so the drop tested only the
+  // expansion of the current call's substring. The `{a},b}` rewrite below turns
+  // `isTop` back on part-way through a string, starting a fresh such run, so
+  // the drop must ignore whatever `acc` already holds from earlier groups.
+  // `accBase[a]` records how much of `acc[a]` predates the current run;
+  // `combine` treats an expansion as empty when it adds nothing past that.
+  var accBase = [0]
+  var dropEmpties = false
+  var firstGroup = true
+  var nextBase
+
+  for (;;) {
+    var m = balanced('{', '}', str);
+
+    // No brace set left: the rest of the string is literal.
+    if (!m) {
+      return combine(acc, accBase, str, [''], max, maxLength, dropEmpties, [])
+    }
+
+    // no need to expand pre, since it is guaranteed to be free of brace-sets
+    var pre = m.pre;
+
+    // For compatibility reasons, `${` is not eligible for brace expansion, and
+    // on the 1.x line it suppresses expansion of the rest of the string too:
+    // the whole remainder is literal. The 2.x and 5.x lines instead keep
+    // expanding the tail, which is what bash does, but changing that here would
+    // be a breaking change for 1.x consumers. Routed through `combine` so the
+    // result is still bounded by `max` and `maxLength`.
+    if (/\$$/.test(pre)) {
+      return combine(acc, accBase, str, [''], max, maxLength, dropEmpties, [])
+    }
+
+    var isNumericSequence = /^-?\d+\.\.-?\d+(?:\.\.-?\d+)?$/.test(m.body);
+    var isAlphaSequence = /^[a-zA-Z]\.\.[a-zA-Z](?:\.\.-?\d+)?$/.test(m.body);
+    var isSequence = isNumericSequence || isAlphaSequence;
+    var isOptions = m.body.indexOf(',') >= 0;
+    if (!isSequence && !isOptions) {
+      // {a},b}
+      if (m.post.match(/,(?!,).*\}/)) {
+        str = m.pre + '{' + m.body + escClose + m.post;
+        // The rewritten string is expanded as if it were a fresh top-level one,
+        // so start a new empty-drop run: anchor the baseline at what `acc`
+        // holds now, and let the next expanding group decide whether to drop.
+        isTop = true
+        firstGroup = true
+        dropEmpties = false
+        accBase = []
+        for (var b = 0; b < acc.length; b++) {
+          accBase.push(acc[b].length)
+        }
+        continue
+      }
+      // Nothing here expands, so the whole remaining string is literal.
+      return combine(
+        acc,
+        accBase,
+        pre + '{' + m.body + '}' + m.post,
+        [''],
+        max,
+        maxLength,
+        dropEmpties,
+        []
+      )
+    }
+
+    if (firstGroup) {
+      dropEmpties = isTop && !isSequence
+      firstGroup = false
+    }
+
+    var values;
+    if (isSequence) {
+      values = expandSequence(m.body, isAlphaSequence, max, maxLength);
+    } else {
+      var n = parseCommaParts(m.body);
+      if (n.length === 1 && n[0] !== undefined) {
+        // x{{a,b}}y ==> x{a}y x{b}y
+        n = expand(n[0], max, maxLength, false).map(embrace);
+        //XXX is this necessary? Can't seem to hit it in tests.
+        /* c8 ignore start */
+        if (n.length === 1) {
+          nextBase = []
+          acc = combine(
+            acc,
+            accBase,
+            pre + n[0],
+            [''],
+            max,
+            maxLength,
+            dropEmpties && !m.post.length,
+            nextBase
+          )
+          accBase = nextBase
+          if (!m.post.length) break
+          str = m.post
+          continue
+        }
+        /* c8 ignore stop */
+      }
+
+      // Values that `combine` is going to drop as empty produce no result, so
+      // they must not count against `max` - otherwise `{a,,b}` with `max: 2`
+      // would stop at `['a', '']` and yield one result instead of two. Skipping
+      // them outright keeps `values` bounded while leaving `max` a bound on
+      // *kept* results. A value is dropped when it adds nothing past the
+      // baseline, which is what `combine` tests.
+      var dropsEmpties = dropEmpties && !m.post.length && !pre
+      for (var d = 0; dropsEmpties && d < acc.length; d++) {
+        if (acc[d].length !== accBase[d]) {
+          dropsEmpties = false
+        }
+      }
+
+      values = []
+      var valuesLength = 0
+      outer: for (var j = 0; j < n.length; j++) {
+        var expanded = expand(n[j], max, maxLength, false)
+        for (var k = 0; k < expanded.length; k++) {
+          var v = expanded[k]
+          if (dropsEmpties && !v) continue
+          if (values.length >= max || valuesLength + v.length > maxLength) {
+            break outer
+          }
+          values.push(v)
+          valuesLength += v.length
+        }
+      }
+    }
+
+    nextBase = []
+    acc = combine(
+      acc,
+      accBase,
+      pre,
+      values,
+      max,
+      maxLength,
+      dropEmpties && !m.post.length,
+      nextBase
+    )
+    accBase = nextBase
+    if (!m.post.length) break
+    str = m.post
+  }
+
+  return acc
+}
+
+
+/***/ }),
+
 /***/ 97087:
 /***/ ((module) => {
 
@@ -65081,6 +64299,1018 @@ function parseProxyResponse(socket) {
 }
 exports.parseProxyResponse = parseProxyResponse;
 //# sourceMappingURL=parse-proxy-response.js.map
+
+/***/ }),
+
+/***/ 43772:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+module.exports = minimatch
+minimatch.Minimatch = Minimatch
+
+var path = (function () { try { return __nccwpck_require__(16928) } catch (e) {}}()) || {
+  sep: '/'
+}
+minimatch.sep = path.sep
+
+var GLOBSTAR = minimatch.GLOBSTAR = Minimatch.GLOBSTAR = {}
+var expand = __nccwpck_require__(94691)
+
+var plTypes = {
+  '!': { open: '(?:(?!(?:', close: '))[^/]*?)'},
+  '?': { open: '(?:', close: ')?' },
+  '+': { open: '(?:', close: ')+' },
+  '*': { open: '(?:', close: ')*' },
+  '@': { open: '(?:', close: ')' }
+}
+
+// any single thing other than /
+// don't need to escape / when using new RegExp()
+var qmark = '[^/]'
+
+// * => any number of characters
+var star = qmark + '*?'
+
+// ** when dots are allowed.  Anything goes, except .. and .
+// not (^ or / followed by one or two dots followed by $ or /),
+// followed by anything, any number of times.
+var twoStarDot = '(?:(?!(?:\\\/|^)(?:\\.{1,2})($|\\\/)).)*?'
+
+// not a ^ or / followed by a dot,
+// followed by anything, any number of times.
+var twoStarNoDot = '(?:(?!(?:\\\/|^)\\.).)*?'
+
+// characters that need to be escaped in RegExp.
+var reSpecials = charSet('().*{}+?[]^$\\!')
+
+// "abc" -> { a:true, b:true, c:true }
+function charSet (s) {
+  return s.split('').reduce(function (set, c) {
+    set[c] = true
+    return set
+  }, {})
+}
+
+// normalizes slashes.
+var slashSplit = /\/+/
+
+minimatch.filter = filter
+function filter (pattern, options) {
+  options = options || {}
+  return function (p, i, list) {
+    return minimatch(p, pattern, options)
+  }
+}
+
+function ext (a, b) {
+  b = b || {}
+  var t = {}
+  Object.keys(a).forEach(function (k) {
+    t[k] = a[k]
+  })
+  Object.keys(b).forEach(function (k) {
+    t[k] = b[k]
+  })
+  return t
+}
+
+minimatch.defaults = function (def) {
+  if (!def || typeof def !== 'object' || !Object.keys(def).length) {
+    return minimatch
+  }
+
+  var orig = minimatch
+
+  var m = function minimatch (p, pattern, options) {
+    return orig(p, pattern, ext(def, options))
+  }
+
+  m.Minimatch = function Minimatch (pattern, options) {
+    return new orig.Minimatch(pattern, ext(def, options))
+  }
+  m.Minimatch.defaults = function defaults (options) {
+    return orig.defaults(ext(def, options)).Minimatch
+  }
+
+  m.filter = function filter (pattern, options) {
+    return orig.filter(pattern, ext(def, options))
+  }
+
+  m.defaults = function defaults (options) {
+    return orig.defaults(ext(def, options))
+  }
+
+  m.makeRe = function makeRe (pattern, options) {
+    return orig.makeRe(pattern, ext(def, options))
+  }
+
+  m.braceExpand = function braceExpand (pattern, options) {
+    return orig.braceExpand(pattern, ext(def, options))
+  }
+
+  m.match = function (list, pattern, options) {
+    return orig.match(list, pattern, ext(def, options))
+  }
+
+  return m
+}
+
+Minimatch.defaults = function (def) {
+  return minimatch.defaults(def).Minimatch
+}
+
+function minimatch (p, pattern, options) {
+  assertValidPattern(pattern)
+
+  if (!options) options = {}
+
+  // shortcut: comments match nothing.
+  if (!options.nocomment && pattern.charAt(0) === '#') {
+    return false
+  }
+
+  return new Minimatch(pattern, options).match(p)
+}
+
+function Minimatch (pattern, options) {
+  if (!(this instanceof Minimatch)) {
+    return new Minimatch(pattern, options)
+  }
+
+  assertValidPattern(pattern)
+
+  if (!options) options = {}
+
+  pattern = pattern.trim()
+
+  // windows support: need to use /, not \
+  if (!options.allowWindowsEscape && path.sep !== '/') {
+    pattern = pattern.split(path.sep).join('/')
+  }
+
+  this.options = options
+  this.maxGlobstarRecursion = options.maxGlobstarRecursion !== undefined
+    ? options.maxGlobstarRecursion : 200
+  this.set = []
+  this.pattern = pattern
+  this.regexp = null
+  this.negate = false
+  this.comment = false
+  this.empty = false
+  this.partial = !!options.partial
+
+  // make the set of regexps etc.
+  this.make()
+}
+
+Minimatch.prototype.debug = function () {}
+
+Minimatch.prototype.make = make
+function make () {
+  var pattern = this.pattern
+  var options = this.options
+
+  // empty patterns and comments match nothing.
+  if (!options.nocomment && pattern.charAt(0) === '#') {
+    this.comment = true
+    return
+  }
+  if (!pattern) {
+    this.empty = true
+    return
+  }
+
+  // step 1: figure out negation, etc.
+  this.parseNegate()
+
+  // step 2: expand braces
+  var set = this.globSet = this.braceExpand()
+
+  if (options.debug) this.debug = function debug() { console.error.apply(console, arguments) }
+
+  this.debug(this.pattern, set)
+
+  // step 3: now we have a set, so turn each one into a series of path-portion
+  // matching patterns.
+  // These will be regexps, except in the case of "**", which is
+  // set to the GLOBSTAR object for globstar behavior,
+  // and will not contain any / characters
+  set = this.globParts = set.map(function (s) {
+    return s.split(slashSplit)
+  })
+
+  this.debug(this.pattern, set)
+
+  // glob --> regexps
+  set = set.map(function (s, si, set) {
+    return s.map(this.parse, this)
+  }, this)
+
+  this.debug(this.pattern, set)
+
+  // filter out everything that didn't compile properly.
+  set = set.filter(function (s) {
+    return s.indexOf(false) === -1
+  })
+
+  this.debug(this.pattern, set)
+
+  this.set = set
+}
+
+Minimatch.prototype.parseNegate = parseNegate
+function parseNegate () {
+  var pattern = this.pattern
+  var negate = false
+  var options = this.options
+  var negateOffset = 0
+
+  if (options.nonegate) return
+
+  for (var i = 0, l = pattern.length
+    ; i < l && pattern.charAt(i) === '!'
+    ; i++) {
+    negate = !negate
+    negateOffset++
+  }
+
+  if (negateOffset) this.pattern = pattern.substr(negateOffset)
+  this.negate = negate
+}
+
+// Brace expansion:
+// a{b,c}d -> abd acd
+// a{b,}c -> abc ac
+// a{0..3}d -> a0d a1d a2d a3d
+// a{b,c{d,e}f}g -> abg acdfg acefg
+// a{b,c}d{e,f}g -> abdeg acdeg abdeg abdfg
+//
+// Invalid sets are not expanded.
+// a{2..}b -> a{2..}b
+// a{b}c -> a{b}c
+minimatch.braceExpand = function (pattern, options) {
+  return braceExpand(pattern, options)
+}
+
+Minimatch.prototype.braceExpand = braceExpand
+
+function braceExpand (pattern, options) {
+  if (!options) {
+    if (this instanceof Minimatch) {
+      options = this.options
+    } else {
+      options = {}
+    }
+  }
+
+  pattern = typeof pattern === 'undefined'
+    ? this.pattern : pattern
+
+  assertValidPattern(pattern)
+
+  // Thanks to Yeting Li <https://github.com/yetingli> for
+  // improving this regexp to avoid a ReDOS vulnerability.
+  if (options.nobrace || !/\{(?:(?!\{).)*\}/.test(pattern)) {
+    // shortcut. no need to expand.
+    return [pattern]
+  }
+
+  return expand(pattern)
+}
+
+var MAX_PATTERN_LENGTH = 1024 * 64
+var assertValidPattern = function (pattern) {
+  if (typeof pattern !== 'string') {
+    throw new TypeError('invalid pattern')
+  }
+
+  if (pattern.length > MAX_PATTERN_LENGTH) {
+    throw new TypeError('pattern is too long')
+  }
+}
+
+// parse a component of the expanded set.
+// At this point, no pattern may contain "/" in it
+// so we're going to return a 2d array, where each entry is the full
+// pattern, split on '/', and then turned into a regular expression.
+// A regexp is made at the end which joins each array with an
+// escaped /, and another full one which joins each regexp with |.
+//
+// Following the lead of Bash 4.1, note that "**" only has special meaning
+// when it is the *only* thing in a path portion.  Otherwise, any series
+// of * is equivalent to a single *.  Globstar behavior is enabled by
+// default, and can be disabled by setting options.noglobstar.
+Minimatch.prototype.parse = parse
+var SUBPARSE = {}
+function parse (pattern, isSub) {
+  assertValidPattern(pattern)
+
+  var options = this.options
+
+  // shortcuts
+  if (pattern === '**') {
+    if (!options.noglobstar)
+      return GLOBSTAR
+    else
+      pattern = '*'
+  }
+  if (pattern === '') return ''
+
+  var re = ''
+  var hasMagic = !!options.nocase
+  var escaping = false
+  // ? => one single character
+  var patternListStack = []
+  var negativeLists = []
+  var stateChar
+  var inClass = false
+  var reClassStart = -1
+  var classStart = -1
+  // . and .. never match anything that doesn't start with .,
+  // even when options.dot is set.
+  var patternStart = pattern.charAt(0) === '.' ? '' // anything
+  // not (start or / followed by . or .. followed by / or end)
+  : options.dot ? '(?!(?:^|\\\/)\\.{1,2}(?:$|\\\/))'
+  : '(?!\\.)'
+  var self = this
+
+  function clearStateChar () {
+    if (stateChar) {
+      // we had some state-tracking character
+      // that wasn't consumed by this pass.
+      switch (stateChar) {
+        case '*':
+          re += star
+          hasMagic = true
+        break
+        case '?':
+          re += qmark
+          hasMagic = true
+        break
+        default:
+          re += '\\' + stateChar
+        break
+      }
+      self.debug('clearStateChar %j %j', stateChar, re)
+      stateChar = false
+    }
+  }
+
+  for (var i = 0, len = pattern.length, c
+    ; (i < len) && (c = pattern.charAt(i))
+    ; i++) {
+    this.debug('%s\t%s %s %j', pattern, i, re, c)
+
+    // skip over any that are escaped.
+    if (escaping && reSpecials[c]) {
+      re += '\\' + c
+      escaping = false
+      continue
+    }
+
+    switch (c) {
+      /* istanbul ignore next */
+      case '/': {
+        // completely not allowed, even escaped.
+        // Should already be path-split by now.
+        return false
+      }
+
+      case '\\':
+        clearStateChar()
+        escaping = true
+      continue
+
+      // the various stateChar values
+      // for the "extglob" stuff.
+      case '?':
+      case '*':
+      case '+':
+      case '@':
+      case '!':
+        this.debug('%s\t%s %s %j <-- stateChar', pattern, i, re, c)
+
+        // all of those are literals inside a class, except that
+        // the glob [!a] means [^a] in regexp
+        if (inClass) {
+          this.debug('  in class')
+          if (c === '!' && i === classStart + 1) c = '^'
+          re += c
+          continue
+        }
+
+        // coalesce consecutive non-globstar * characters
+        if (c === '*' && stateChar === '*') continue
+
+        // if we already have a stateChar, then it means
+        // that there was something like ** or +? in there.
+        // Handle the stateChar, then proceed with this one.
+        self.debug('call clearStateChar %j', stateChar)
+        clearStateChar()
+        stateChar = c
+        // if extglob is disabled, then +(asdf|foo) isn't a thing.
+        // just clear the statechar *now*, rather than even diving into
+        // the patternList stuff.
+        if (options.noext) clearStateChar()
+      continue
+
+      case '(':
+        if (inClass) {
+          re += '('
+          continue
+        }
+
+        if (!stateChar) {
+          re += '\\('
+          continue
+        }
+
+        patternListStack.push({
+          type: stateChar,
+          start: i - 1,
+          reStart: re.length,
+          open: plTypes[stateChar].open,
+          close: plTypes[stateChar].close
+        })
+        // negation is (?:(?!js)[^/]*)
+        re += stateChar === '!' ? '(?:(?!(?:' : '(?:'
+        this.debug('plType %j %j', stateChar, re)
+        stateChar = false
+      continue
+
+      case ')':
+        if (inClass || !patternListStack.length) {
+          re += '\\)'
+          continue
+        }
+
+        clearStateChar()
+        hasMagic = true
+        var pl = patternListStack.pop()
+        // negation is (?:(?!js)[^/]*)
+        // The others are (?:<pattern>)<type>
+        re += pl.close
+        if (pl.type === '!') {
+          negativeLists.push(pl)
+        }
+        pl.reEnd = re.length
+      continue
+
+      case '|':
+        if (inClass || !patternListStack.length || escaping) {
+          re += '\\|'
+          escaping = false
+          continue
+        }
+
+        clearStateChar()
+        re += '|'
+      continue
+
+      // these are mostly the same in regexp and glob
+      case '[':
+        // swallow any state-tracking char before the [
+        clearStateChar()
+
+        if (inClass) {
+          re += '\\' + c
+          continue
+        }
+
+        inClass = true
+        classStart = i
+        reClassStart = re.length
+        re += c
+      continue
+
+      case ']':
+        //  a right bracket shall lose its special
+        //  meaning and represent itself in
+        //  a bracket expression if it occurs
+        //  first in the list.  -- POSIX.2 2.8.3.2
+        if (i === classStart + 1 || !inClass) {
+          re += '\\' + c
+          escaping = false
+          continue
+        }
+
+        // handle the case where we left a class open.
+        // "[z-a]" is valid, equivalent to "\[z-a\]"
+        // split where the last [ was, make sure we don't have
+        // an invalid re. if so, re-walk the contents of the
+        // would-be class to re-translate any characters that
+        // were passed through as-is
+        // TODO: It would probably be faster to determine this
+        // without a try/catch and a new RegExp, but it's tricky
+        // to do safely.  For now, this is safe and works.
+        var cs = pattern.substring(classStart + 1, i)
+        try {
+          RegExp('[' + cs + ']')
+        } catch (er) {
+          // not a valid class!
+          var sp = this.parse(cs, SUBPARSE)
+          re = re.substr(0, reClassStart) + '\\[' + sp[0] + '\\]'
+          hasMagic = hasMagic || sp[1]
+          inClass = false
+          continue
+        }
+
+        // finish up the class.
+        hasMagic = true
+        inClass = false
+        re += c
+      continue
+
+      default:
+        // swallow any state char that wasn't consumed
+        clearStateChar()
+
+        if (escaping) {
+          // no need
+          escaping = false
+        } else if (reSpecials[c]
+          && !(c === '^' && inClass)) {
+          re += '\\'
+        }
+
+        re += c
+
+    } // switch
+  } // for
+
+  // handle the case where we left a class open.
+  // "[abc" is valid, equivalent to "\[abc"
+  if (inClass) {
+    // split where the last [ was, and escape it
+    // this is a huge pita.  We now have to re-walk
+    // the contents of the would-be class to re-translate
+    // any characters that were passed through as-is
+    cs = pattern.substr(classStart + 1)
+    sp = this.parse(cs, SUBPARSE)
+    re = re.substr(0, reClassStart) + '\\[' + sp[0]
+    hasMagic = hasMagic || sp[1]
+  }
+
+  // handle the case where we had a +( thing at the *end*
+  // of the pattern.
+  // each pattern list stack adds 3 chars, and we need to go through
+  // and escape any | chars that were passed through as-is for the regexp.
+  // Go through and escape them, taking care not to double-escape any
+  // | chars that were already escaped.
+  for (pl = patternListStack.pop(); pl; pl = patternListStack.pop()) {
+    var tail = re.slice(pl.reStart + pl.open.length)
+    this.debug('setting tail', re, pl)
+    // maybe some even number of \, then maybe 1 \, followed by a |
+    tail = tail.replace(/((?:\\{2}){0,64})(\\?)\|/g, function (_, $1, $2) {
+      if (!$2) {
+        // the | isn't already escaped, so escape it.
+        $2 = '\\'
+      }
+
+      // need to escape all those slashes *again*, without escaping the
+      // one that we need for escaping the | character.  As it works out,
+      // escaping an even number of slashes can be done by simply repeating
+      // it exactly after itself.  That's why this trick works.
+      //
+      // I am sorry that you have to see this.
+      return $1 + $1 + $2 + '|'
+    })
+
+    this.debug('tail=%j\n   %s', tail, tail, pl, re)
+    var t = pl.type === '*' ? star
+      : pl.type === '?' ? qmark
+      : '\\' + pl.type
+
+    hasMagic = true
+    re = re.slice(0, pl.reStart) + t + '\\(' + tail
+  }
+
+  // handle trailing things that only matter at the very end.
+  clearStateChar()
+  if (escaping) {
+    // trailing \\
+    re += '\\\\'
+  }
+
+  // only need to apply the nodot start if the re starts with
+  // something that could conceivably capture a dot
+  var addPatternStart = false
+  switch (re.charAt(0)) {
+    case '[': case '.': case '(': addPatternStart = true
+  }
+
+  // Hack to work around lack of negative lookbehind in JS
+  // A pattern like: *.!(x).!(y|z) needs to ensure that a name
+  // like 'a.xyz.yz' doesn't match.  So, the first negative
+  // lookahead, has to look ALL the way ahead, to the end of
+  // the pattern.
+  for (var n = negativeLists.length - 1; n > -1; n--) {
+    var nl = negativeLists[n]
+
+    var nlBefore = re.slice(0, nl.reStart)
+    var nlFirst = re.slice(nl.reStart, nl.reEnd - 8)
+    var nlLast = re.slice(nl.reEnd - 8, nl.reEnd)
+    var nlAfter = re.slice(nl.reEnd)
+
+    nlLast += nlAfter
+
+    // Handle nested stuff like *(*.js|!(*.json)), where open parens
+    // mean that we should *not* include the ) in the bit that is considered
+    // "after" the negated section.
+    var openParensBefore = nlBefore.split('(').length - 1
+    var cleanAfter = nlAfter
+    for (i = 0; i < openParensBefore; i++) {
+      cleanAfter = cleanAfter.replace(/\)[+*?]?/, '')
+    }
+    nlAfter = cleanAfter
+
+    var dollar = ''
+    if (nlAfter === '' && isSub !== SUBPARSE) {
+      dollar = '$'
+    }
+    var newRe = nlBefore + nlFirst + nlAfter + dollar + nlLast
+    re = newRe
+  }
+
+  // if the re is not "" at this point, then we need to make sure
+  // it doesn't match against an empty path part.
+  // Otherwise a/* will match a/, which it should not.
+  if (re !== '' && hasMagic) {
+    re = '(?=.)' + re
+  }
+
+  if (addPatternStart) {
+    re = patternStart + re
+  }
+
+  // parsing just a piece of a larger pattern.
+  if (isSub === SUBPARSE) {
+    return [re, hasMagic]
+  }
+
+  // skip the regexp for non-magical patterns
+  // unescape anything in it, though, so that it'll be
+  // an exact match against a file etc.
+  if (!hasMagic) {
+    return globUnescape(pattern)
+  }
+
+  var flags = options.nocase ? 'i' : ''
+  try {
+    var regExp = new RegExp('^' + re + '$', flags)
+  } catch (er) /* istanbul ignore next - should be impossible */ {
+    // If it was an invalid regular expression, then it can't match
+    // anything.  This trick looks for a character after the end of
+    // the string, which is of course impossible, except in multi-line
+    // mode, but it's not a /m regex.
+    return new RegExp('$.')
+  }
+
+  regExp._glob = pattern
+  regExp._src = re
+
+  return regExp
+}
+
+minimatch.makeRe = function (pattern, options) {
+  return new Minimatch(pattern, options || {}).makeRe()
+}
+
+Minimatch.prototype.makeRe = makeRe
+function makeRe () {
+  if (this.regexp || this.regexp === false) return this.regexp
+
+  // at this point, this.set is a 2d array of partial
+  // pattern strings, or "**".
+  //
+  // It's better to use .match().  This function shouldn't
+  // be used, really, but it's pretty convenient sometimes,
+  // when you just want to work with a regex.
+  var set = this.set
+
+  if (!set.length) {
+    this.regexp = false
+    return this.regexp
+  }
+  var options = this.options
+
+  var twoStar = options.noglobstar ? star
+    : options.dot ? twoStarDot
+    : twoStarNoDot
+  var flags = options.nocase ? 'i' : ''
+
+  var re = set.map(function (pattern) {
+    return pattern.map(function (p) {
+      return (p === GLOBSTAR) ? twoStar
+      : (typeof p === 'string') ? regExpEscape(p)
+      : p._src
+    }).join('\\\/')
+  }).join('|')
+
+  // must match entire pattern
+  // ending in a * or ** will make it less strict.
+  re = '^(?:' + re + ')$'
+
+  // can match anything, as long as it's not this.
+  if (this.negate) re = '^(?!' + re + ').*$'
+
+  try {
+    this.regexp = new RegExp(re, flags)
+  } catch (ex) /* istanbul ignore next - should be impossible */ {
+    this.regexp = false
+  }
+  return this.regexp
+}
+
+minimatch.match = function (list, pattern, options) {
+  options = options || {}
+  var mm = new Minimatch(pattern, options)
+  list = list.filter(function (f) {
+    return mm.match(f)
+  })
+  if (mm.options.nonull && !list.length) {
+    list.push(pattern)
+  }
+  return list
+}
+
+Minimatch.prototype.match = function match (f, partial) {
+  if (typeof partial === 'undefined') partial = this.partial
+  this.debug('match', f, this.pattern)
+  // short-circuit in the case of busted things.
+  // comments, etc.
+  if (this.comment) return false
+  if (this.empty) return f === ''
+
+  if (f === '/' && partial) return true
+
+  var options = this.options
+
+  // windows: need to use /, not \
+  if (path.sep !== '/') {
+    f = f.split(path.sep).join('/')
+  }
+
+  // treat the test path as a set of pathparts.
+  f = f.split(slashSplit)
+  this.debug(this.pattern, 'split', f)
+
+  // just ONE of the pattern sets in this.set needs to match
+  // in order for it to be valid.  If negating, then just one
+  // match means that we have failed.
+  // Either way, return on the first hit.
+
+  var set = this.set
+  this.debug(this.pattern, 'set', set)
+
+  // Find the basename of the path by looking for the last non-empty segment
+  var filename
+  var i
+  for (i = f.length - 1; i >= 0; i--) {
+    filename = f[i]
+    if (filename) break
+  }
+
+  for (i = 0; i < set.length; i++) {
+    var pattern = set[i]
+    var file = f
+    if (options.matchBase && pattern.length === 1) {
+      file = [filename]
+    }
+    var hit = this.matchOne(file, pattern, partial)
+    if (hit) {
+      if (options.flipNegate) return true
+      return !this.negate
+    }
+  }
+
+  // didn't get any hits.  this is success if it's a negative
+  // pattern, failure otherwise.
+  if (options.flipNegate) return false
+  return this.negate
+}
+
+// set partial to true to test if, for example,
+// "/a/b" matches the start of "/*/b/*/d"
+// Partial means, if you run out of file before you run
+// out of pattern, then that's fine, as long as all
+// the parts match.
+Minimatch.prototype.matchOne = function (file, pattern, partial) {
+  if (pattern.indexOf(GLOBSTAR) !== -1) {
+    return this._matchGlobstar(file, pattern, partial, 0, 0)
+  }
+  return this._matchOne(file, pattern, partial, 0, 0)
+}
+
+Minimatch.prototype._matchGlobstar = function (file, pattern, partial, fileIndex, patternIndex) {
+  var i
+
+  // find first globstar from patternIndex
+  var firstgs = -1
+  for (i = patternIndex; i < pattern.length; i++) {
+    if (pattern[i] === GLOBSTAR) { firstgs = i; break }
+  }
+
+  // find last globstar
+  var lastgs = -1
+  for (i = pattern.length - 1; i >= 0; i--) {
+    if (pattern[i] === GLOBSTAR) { lastgs = i; break }
+  }
+
+  var head = pattern.slice(patternIndex, firstgs)
+  var body = partial ? pattern.slice(firstgs + 1) : pattern.slice(firstgs + 1, lastgs)
+  var tail = partial ? [] : pattern.slice(lastgs + 1)
+
+  // check the head
+  if (head.length) {
+    var fileHead = file.slice(fileIndex, fileIndex + head.length)
+    if (!this._matchOne(fileHead, head, partial, 0, 0)) {
+      return false
+    }
+    fileIndex += head.length
+  }
+
+  // check the tail
+  var fileTailMatch = 0
+  if (tail.length) {
+    if (tail.length + fileIndex > file.length) return false
+
+    var tailStart = file.length - tail.length
+    if (this._matchOne(file, tail, partial, tailStart, 0)) {
+      fileTailMatch = tail.length
+    } else {
+      // affordance for stuff like a/**/* matching a/b/
+      if (file[file.length - 1] !== '' ||
+          fileIndex + tail.length === file.length) {
+        return false
+      }
+      tailStart--
+      if (!this._matchOne(file, tail, partial, tailStart, 0)) {
+        return false
+      }
+      fileTailMatch = tail.length + 1
+    }
+  }
+
+  // if body is empty (single ** between head and tail)
+  if (!body.length) {
+    var sawSome = !!fileTailMatch
+    for (i = fileIndex; i < file.length - fileTailMatch; i++) {
+      var f = String(file[i])
+      sawSome = true
+      if (f === '.' || f === '..' ||
+          (!this.options.dot && f.charAt(0) === '.')) {
+        return false
+      }
+    }
+    return partial || sawSome
+  }
+
+  // split body into segments at each GLOBSTAR
+  var bodySegments = [[[], 0]]
+  var currentBody = bodySegments[0]
+  var nonGsParts = 0
+  var nonGsPartsSums = [0]
+  for (var bi = 0; bi < body.length; bi++) {
+    var b = body[bi]
+    if (b === GLOBSTAR) {
+      nonGsPartsSums.push(nonGsParts)
+      currentBody = [[], 0]
+      bodySegments.push(currentBody)
+    } else {
+      currentBody[0].push(b)
+      nonGsParts++
+    }
+  }
+
+  var idx = bodySegments.length - 1
+  var fileLength = file.length - fileTailMatch
+  for (var si = 0; si < bodySegments.length; si++) {
+    bodySegments[si][1] = fileLength -
+      (nonGsPartsSums[idx--] + bodySegments[si][0].length)
+  }
+
+  return !!this._matchGlobStarBodySections(
+    file, bodySegments, fileIndex, 0, partial, 0, !!fileTailMatch
+  )
+}
+
+// return false for "nope, not matching"
+// return null for "not matching, cannot keep trying"
+Minimatch.prototype._matchGlobStarBodySections = function (
+  file, bodySegments, fileIndex, bodyIndex, partial, globStarDepth, sawTail
+) {
+  var bs = bodySegments[bodyIndex]
+  if (!bs) {
+    // just make sure there are no bad dots
+    for (var i = fileIndex; i < file.length; i++) {
+      sawTail = true
+      var f = file[i]
+      if (f === '.' || f === '..' ||
+          (!this.options.dot && f.charAt(0) === '.')) {
+        return false
+      }
+    }
+    return sawTail
+  }
+
+  var body = bs[0]
+  var after = bs[1]
+  while (fileIndex <= after) {
+    var m = this._matchOne(
+      file.slice(0, fileIndex + body.length),
+      body,
+      partial,
+      fileIndex,
+      0
+    )
+    // if limit exceeded, no match. intentional false negative,
+    // acceptable break in correctness for security.
+    if (m && globStarDepth < this.maxGlobstarRecursion) {
+      var sub = this._matchGlobStarBodySections(
+        file, bodySegments,
+        fileIndex + body.length, bodyIndex + 1,
+        partial, globStarDepth + 1, sawTail
+      )
+      if (sub !== false) {
+        return sub
+      }
+    }
+    var f = file[fileIndex]
+    if (f === '.' || f === '..' ||
+        (!this.options.dot && f.charAt(0) === '.')) {
+      return false
+    }
+    fileIndex++
+  }
+  return partial || null
+}
+
+Minimatch.prototype._matchOne = function (file, pattern, partial, fileIndex, patternIndex) {
+  var fi, pi, fl, pl
+  for (
+    fi = fileIndex, pi = patternIndex, fl = file.length, pl = pattern.length
+    ; (fi < fl) && (pi < pl)
+    ; fi++, pi++
+  ) {
+    this.debug('matchOne loop')
+    var p = pattern[pi]
+    var f = file[fi]
+
+    this.debug(pattern, p, f)
+
+    // should be impossible.
+    // some invalid regexp stuff in the set.
+    /* istanbul ignore if */
+    if (p === false || p === GLOBSTAR) return false
+
+    // something other than **
+    // non-magic patterns just have to match exactly
+    // patterns with magic have been turned into regexps.
+    var hit
+    if (typeof p === 'string') {
+      hit = f === p
+      this.debug('string match', p, f, hit)
+    } else {
+      hit = f.match(p)
+      this.debug('pattern match', p, f, hit)
+    }
+
+    if (!hit) return false
+  }
+
+  // now either we fell off the end of the pattern, or we're done.
+  if (fi === fl && pi === pl) {
+    // ran out of pattern and filename at the same time.
+    // an exact hit!
+    return true
+  } else if (fi === fl) {
+    // ran out of file, but still had pattern left.
+    // this is ok if we're doing the match as part of
+    // a glob fs traversal.
+    return partial
+  } else /* istanbul ignore else */ if (pi === pl) {
+    // ran out of pattern, still have file left.
+    // this is only acceptable if we're on the very last
+    // empty segment of a file with a trailing slash.
+    // a/* should match a/b/
+    return (fi === fl - 1) && (file[fi] === '')
+  }
+
+  // should be unreachable.
+  /* istanbul ignore next */
+  throw new Error('wtf?')
+}
+
+// replace stuff like \* with *
+function globUnescape (s) {
+  return s.replace(/\\(.)/g, '$1')
+}
+
+function regExpEscape (s) {
+  return s.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')
+}
+
 
 /***/ }),
 
@@ -71670,7 +71900,13 @@ function processHeader (request, key, val) {
       } else if (typeof val[i] === 'object') {
         throw new InvalidArgumentError(`invalid ${key} header`)
       } else {
-        arr.push(`${val[i]}`)
+        // Coerce primitives (and reject unsafe coercions such as functions
+        // with a crafted toString/Symbol.toPrimitive).
+        const str = `${val[i]}`
+        if (!isValidHeaderValue(str)) {
+          throw new InvalidArgumentError(`invalid ${key} header`)
+        }
+        arr.push(str)
       }
     }
     val = arr
@@ -71681,7 +71917,12 @@ function processHeader (request, key, val) {
   } else if (val === null) {
     val = ''
   } else {
+    // Coerce primitives (and reject unsafe coercions such as functions
+    // with a crafted toString/Symbol.toPrimitive).
     val = `${val}`
+    if (!isValidHeaderValue(val)) {
+      throw new InvalidArgumentError(`invalid ${key} header`)
+    }
   }
 
   if (headerName === 'host') {
@@ -73053,6 +73294,7 @@ const {
   RequestContentLengthMismatchError,
   ResponseContentLengthMismatchError,
   RequestAbortedError,
+  InvalidArgumentError,
   HeadersTimeoutError,
   HeadersOverflowError,
   SocketError,
@@ -73918,7 +74160,7 @@ async function connectH1 (client, socket) {
 
 function clearIdleSocketValidation (socket) {
   if (socket[kIdleSocketValidationTimeout]) {
-    clearTimeout(socket[kIdleSocketValidationTimeout])
+    clearImmediate(socket[kIdleSocketValidationTimeout])
     socket[kIdleSocketValidationTimeout] = null
   }
 
@@ -73927,15 +74169,23 @@ function clearIdleSocketValidation (socket) {
 
 function scheduleIdleSocketValidation (client, socket) {
   socket[kIdleSocketValidation] = 1
-  socket[kIdleSocketValidationTimeout] = setTimeout(() => {
+  // Yield to the check phase (after poll) so unsolicited bytes / FIN / RST
+  // already pending on this idle keep-alive socket are processed before the
+  // next request is written (GHSA-35p6-xmwp-9g52).
+  //
+  // setTimeout(0) pays Node's ~1ms timer floor on every sequential reuse
+  // (#5493). setImmediate avoids that, but an *unref'd* Immediate lets poll
+  // block for ~500ms when the event loop is otherwise idle (#5600 / #5606).
+  // A ref'd Immediate both keeps the pending request alive and makes poll
+  // return immediately — the hybrid those issues asked for.
+  socket[kIdleSocketValidationTimeout] = setImmediate(() => {
     socket[kIdleSocketValidationTimeout] = null
     socket[kIdleSocketValidation] = 2
 
     if (client[kSocket] === socket && !socket.destroyed) {
       client[kResume]()
     }
-  }, 0)
-  socket[kIdleSocketValidationTimeout].unref?.()
+  })
 }
 
 /**
@@ -74036,8 +74286,16 @@ function writeH1 (client, request) {
     }
     body = bodyStream.stream
     contentLength = bodyStream.length
-  } else if (util.isBlobLike(body) && request.contentType == null && body.type) {
-    headers.push('content-type', body.type)
+  } else if (util.isBlobLike(body) && request.contentType == null) {
+    const contentType = body.type
+    if (contentType) {
+      const contentTypeValue = `${contentType}`
+      if (!util.isValidHeaderValue(contentTypeValue)) {
+        util.errorRequest(client, request, new InvalidArgumentError('invalid content-type header'))
+        return false
+      }
+      headers.push('content-type', contentTypeValue)
+    }
   }
 
   if (body && typeof body.read === 'function') {
@@ -77510,6 +77768,28 @@ function calculateRetryAfterHeader (retryAfter) {
   return new Date(retryAfter).getTime() - current
 }
 
+function validatePartialResponseContentLength (headers, range, statusCode, retryCount) {
+  const contentLength = headers['content-length']
+  if (contentLength == null) {
+    return null
+  }
+
+  if (!Number.isFinite(range.start) || !Number.isFinite(range.end)) {
+    return null
+  }
+
+  const length = Number(contentLength)
+  const expectedLength = range.end - range.start + 1
+  if (!Number.isFinite(length) || length !== expectedLength) {
+    return new RequestRetryError('Content-Length mismatch', statusCode, {
+      headers,
+      data: { count: retryCount }
+    })
+  }
+
+  return null
+}
+
 class RetryHandler {
   constructor (opts, handlers) {
     const { retryOptions, ...dispatchOpts } = opts
@@ -77563,6 +77843,7 @@ class RetryHandler {
     this.end = null
     this.etag = null
     this.resume = null
+    this.headersSent = false
 
     // Handle possible onConnect duplication
     this.handler.onConnect(reason => {
@@ -77573,6 +77854,20 @@ class RetryHandler {
         this.reason = reason
       }
     })
+  }
+
+  checkpointResponseEnd (headers, resume) {
+    if (this.end == null && this.opts.method !== 'HEAD') {
+      const contentLength = headers['content-length']
+      this.end = contentLength != null ? Number(contentLength) - 1 : null
+
+      assert(
+        this.end == null || Number.isFinite(this.end),
+        'invalid content-length'
+      )
+    }
+
+    this.resume = this.end != null ? resume : null
   }
 
   onRequestSent () {
@@ -77664,6 +77959,8 @@ class RetryHandler {
 
     if (statusCode >= 300) {
       if (this.retryOpts.statusCodes.includes(statusCode) === false) {
+        this.headersSent = true
+        this.checkpointResponseEnd(headers, resume)
         return this.handler.onHeaders(
           statusCode,
           rawHeaders,
@@ -77724,10 +78021,23 @@ class RetryHandler {
         return false
       }
 
+      const contentLengthError = validatePartialResponseContentLength(headers, contentRange, statusCode, this.retryCount)
+      if (contentLengthError != null) {
+        this.abort(contentLengthError)
+        return false
+      }
+
       const { start, size, end = size - 1 } = contentRange
 
-      assert(this.start === start, 'content-range mismatch')
-      assert(this.end == null || this.end === end, 'content-range mismatch')
+      if (this.start !== start || (this.end != null && this.end !== end)) {
+        this.abort(
+          new RequestRetryError('Content-Range mismatch', statusCode, {
+            headers,
+            data: { count: this.retryCount }
+          })
+        )
+        return false
+      }
 
       this.resume = resume
       return true
@@ -77739,12 +78049,19 @@ class RetryHandler {
         const range = parseRangeHeader(headers['content-range'])
 
         if (range == null) {
+          this.headersSent = true
           return this.handler.onHeaders(
             statusCode,
             rawHeaders,
             resume,
             statusMessage
           )
+        }
+
+        const contentLengthError = validatePartialResponseContentLength(headers, range, statusCode, this.retryCount)
+        if (contentLengthError != null) {
+          this.abort(contentLengthError)
+          return false
         }
 
         const { start, size, end = size - 1 } = range
@@ -77771,6 +78088,7 @@ class RetryHandler {
       )
 
       this.resume = resume
+      this.headersSent = true
       this.etag = headers.etag != null ? headers.etag : null
 
       // Weak etags are not useful for comparison nor cache
@@ -77810,7 +78128,7 @@ class RetryHandler {
   }
 
   onError (err) {
-    if (this.aborted || isDisturbed(this.opts.body)) {
+    if (this.aborted || isDisturbed(this.opts.body) || (this.headersSent && this.resume == null)) {
       return this.handler.onError(err)
     }
 
@@ -81991,7 +82309,7 @@ function validateCookiePath (path) {
 
     if (
       code < 0x20 || // exclude CTLs (0-31)
-      code === 0x7F || // DEL
+      code > 0x7E || // exclude DEL and non-ascii
       code === 0x3B // ;
     ) {
       throw new Error('Invalid cookie path')
@@ -82000,16 +82318,80 @@ function validateCookiePath (path) {
 }
 
 /**
- * I have no idea why these values aren't allowed to be honest,
- * but Deno tests these. - Khafra
+ * <let-dig> ::= <letter> | <digit>
+ *
+ * <letter> ::= any one of the 52 alphabetic characters A through Z in
+ * upper case and a through z in lower case
+ *
+ * <digit> ::= any one of the ten digits 0 through 9r
+ *
+ * @see https://www.rfc-editor.org/rfc/rfc1034#section-3.5
+ * @param {number} code
+ */
+function isLetterOrDigit (code) {
+  return (
+    (code >= 0x30 && code <= 0x39) || // 0-9
+    (code >= 0x41 && code <= 0x5A) || // A-Z
+    (code >= 0x61 && code <= 0x7A) // a-z
+  )
+}
+
+/**
+ * Validates a cookie domain against the "preferred name syntax".
+ *
+ * <domain>      ::= <subdomain> | " "
+ * <subdomain>   ::= <label> | <subdomain> "." <label>
+ * <label>       ::= <let-dig> [ [ <ldh-str> ] <let-dig> ]
+ * <ldh-str>     ::= <let-dig-hyp> | <let-dig-hyp> <ldh-str>
+ * <let-dig-hyp> ::= <let-dig> | "-"
+ *
+ * @see https://www.rfc-editor.org/rfc/rfc1034#section-3.5
+ * @see https://www.rfc-editor.org/rfc/rfc1123#section-2.1
+ * @see https://www.rfc-editor.org/rfc/rfc1035#section-2.3.4
  * @param {string} domain
  */
 function validateCookieDomain (domain) {
-  if (
-    domain.startsWith('-') ||
-    domain.endsWith('.') ||
-    domain.endsWith('-')
-  ) {
+  // <domain> ::= <subdomain> | " "
+  if (domain === ' ') {
+    return
+  }
+
+  if (domain.length > 255) {
+    throw new Error('Invalid cookie domain')
+  }
+
+  let labelLength = 0
+
+  for (let i = 0; i < domain.length; ++i) {
+    const code = domain.charCodeAt(i)
+
+    if (code === 0x2E) {
+      if (labelLength === 0) {
+        throw new Error('Invalid cookie domain')
+      }
+
+      if (domain.charCodeAt(i - 1) === 0x2D) { // "-"
+        throw new Error('Invalid cookie domain')
+      }
+
+      labelLength = 0
+      continue
+    }
+
+    if (labelLength === 0 && !isLetterOrDigit(code)) {
+      throw new Error('Invalid cookie domain')
+    }
+
+    if (!isLetterOrDigit(code) && code !== 0x2D) { // "-"
+      throw new Error('Invalid cookie domain')
+    }
+
+    if (++labelLength > 63) {
+      throw new Error('Invalid cookie domain')
+    }
+  }
+
+  if (labelLength === 0 || domain.charCodeAt(domain.length - 1) === 0x2D) { // "-"
     throw new Error('Invalid cookie domain')
   }
 }
@@ -82152,7 +82534,13 @@ function stringify (cookie) {
 
     const [key, ...value] = part.split('=')
 
-    out.push(`${key.trim()}=${value.join('=')}`)
+    const trimmedKey = key.trim()
+    const joinedValue = value.join('=')
+
+    validateCookieName(trimmedKey)
+    validateCookieValue(joinedValue)
+
+    out.push(`${trimmedKey}=${joinedValue}`)
   }
 
   return out.join('; ')
@@ -82198,6 +82586,49 @@ const COLON = 0x3A
  */
 const SPACE = 0x20
 
+const DATA = Buffer.from('data')
+const EVENT = Buffer.from('event')
+const ID = Buffer.from('id')
+const RETRY = Buffer.from('retry')
+
+function isASCIINumberBytes (buffer, start) {
+  if (start >= buffer.length) {
+    return false
+  }
+
+  for (let i = start; i < buffer.length; i++) {
+    if (buffer[i] < 0x30 || buffer[i] > 0x39) {
+      return false
+    }
+  }
+
+  return true
+}
+
+function isValidLastEventIdBytes (buffer, start) {
+  for (let i = start; i < buffer.length; i++) {
+    if (buffer[i] === 0x00) {
+      return false
+    }
+  }
+
+  return true
+}
+
+function isFieldName (line, length, field) {
+  if (length !== field.length) {
+    return false
+  }
+
+  for (let i = 0; i < length; i++) {
+    if (line[i] !== field[i]) {
+      return false
+    }
+  }
+
+  return true
+}
+
 /**
  * @typedef {object} EventSourceStreamEvent
  * @type {object}
@@ -82238,11 +82669,14 @@ class EventSourceStream extends Transform {
   eventEndCheck = false
 
   /**
-   * @type {Buffer}
+   * @type {Buffer[]}
    */
-  buffer = null
+  chunks = []
 
+  chunkIndex = 0
   pos = 0
+  lineChunkIndex = 0
+  linePos = 0
 
   event = {
     data: undefined,
@@ -82281,92 +82715,20 @@ class EventSourceStream extends Transform {
       return
     }
 
-    // Cache the chunk in the buffer, as the data might not be complete while
-    // processing it
-    // TODO: Investigate if there is a more performant way to handle
-    // incoming chunks
-    // see: https://github.com/nodejs/undici/issues/2630
-    if (this.buffer) {
-      this.buffer = Buffer.concat([this.buffer, chunk])
-    } else {
-      this.buffer = chunk
-    }
+    this.chunks.push(chunk)
 
     // Strip leading byte-order-mark if we opened the stream and started
     // the processing of the incoming data
     if (this.checkBOM) {
-      switch (this.buffer.length) {
-        case 1:
-          // Check if the first byte is the same as the first byte of the BOM
-          if (this.buffer[0] === BOM[0]) {
-            // If it is, we need to wait for more data
-            callback()
-            return
-          }
-          // Set the checkBOM flag to false as we don't need to check for the
-          // BOM anymore
-          this.checkBOM = false
-
-          // The buffer only contains one byte so we need to wait for more data
-          callback()
-          return
-        case 2:
-          // Check if the first two bytes are the same as the first two bytes
-          // of the BOM
-          if (
-            this.buffer[0] === BOM[0] &&
-            this.buffer[1] === BOM[1]
-          ) {
-            // If it is, we need to wait for more data, because the third byte
-            // is needed to determine if it is the BOM or not
-            callback()
-            return
-          }
-
-          // Set the checkBOM flag to false as we don't need to check for the
-          // BOM anymore
-          this.checkBOM = false
-          break
-        case 3:
-          // Check if the first three bytes are the same as the first three
-          // bytes of the BOM
-          if (
-            this.buffer[0] === BOM[0] &&
-            this.buffer[1] === BOM[1] &&
-            this.buffer[2] === BOM[2]
-          ) {
-            // If it is, we can drop the buffered data, as it is only the BOM
-            this.buffer = Buffer.alloc(0)
-            // Set the checkBOM flag to false as we don't need to check for the
-            // BOM anymore
-            this.checkBOM = false
-
-            // Await more data
-            callback()
-            return
-          }
-          // If it is not the BOM, we can start processing the data
-          this.checkBOM = false
-          break
-        default:
-          // The buffer is longer than 3 bytes, so we can drop the BOM if it is
-          // present
-          if (
-            this.buffer[0] === BOM[0] &&
-            this.buffer[1] === BOM[1] &&
-            this.buffer[2] === BOM[2]
-          ) {
-            // Remove the BOM from the buffer
-            this.buffer = this.buffer.subarray(3)
-          }
-
-          // Set the checkBOM flag to false as we don't need to check for the
-          this.checkBOM = false
-          break
+      if (this.handleBOM()) {
+        callback()
+        return
       }
     }
 
-    while (this.pos < this.buffer.length) {
+    while (this.hasCurrentByte()) {
+      const byte = this.currentByte()
+
       // If the previous line ended with an end-of-line, we need to check
       // if the next character is also an end-of-line.
       if (this.eventEndCheck) {
@@ -82379,10 +82741,9 @@ class EventSourceStream extends Transform {
         if (this.crlfCheck) {
           // If the current character is a line feed, we can remove it
           // from the buffer and reset the crlfCheck flag
-          if (this.buffer[this.pos] === LF) {
-            this.buffer = this.buffer.subarray(this.pos + 1)
-            this.pos = 0
+          if (byte === LF) {
             this.crlfCheck = false
+            this.consumeCurrentByte()
 
             // It is possible that the line feed is not the end of the
             // event. We need to check if the next character is an
@@ -82398,19 +82759,17 @@ class EventSourceStream extends Transform {
           this.crlfCheck = false
         }
 
-        if (this.buffer[this.pos] === LF || this.buffer[this.pos] === CR) {
+        if (byte === LF || byte === CR) {
           // If the current character is a carriage return, we need to
           // set the crlfCheck flag to true, as we need to check if the
           // next character is a line feed so we can remove it from the
           // buffer
-          if (this.buffer[this.pos] === CR) {
+          if (byte === CR) {
             this.crlfCheck = true
           }
 
-          this.buffer = this.buffer.subarray(this.pos + 1)
-          this.pos = 0
-          if (
-            this.event.data !== undefined || this.event.event || this.event.id || this.event.retry) {
+          this.consumeCurrentByte()
+          if (this.hasPendingEvent()) {
             this.processEvent(this.event)
           }
           this.clearEvent()
@@ -82424,22 +82783,18 @@ class EventSourceStream extends Transform {
 
       // If the current character is an end-of-line, we can process the
       // line
-      if (this.buffer[this.pos] === LF || this.buffer[this.pos] === CR) {
+      if (byte === LF || byte === CR) {
         // If the current character is a carriage return, we need to
         // set the crlfCheck flag to true, as we need to check if the
         // next character is a line feed
-        if (this.buffer[this.pos] === CR) {
+        if (byte === CR) {
           this.crlfCheck = true
         }
 
         // In any case, we can process the line as we reached an
         // end-of-line character
-        this.parseLine(this.buffer.subarray(0, this.pos), this.event)
-
-        // Remove the processed line from the buffer
-        this.buffer = this.buffer.subarray(this.pos + 1)
-        // Reset the position as we removed the processed line from the buffer
-        this.pos = 0
+        this.parseLine(this.readLine(), this.event)
+        this.consumeCurrentByte()
         // A line was processed and this could be the end of the event. We need
         // to check if the next line is empty to determine if the event is
         // finished.
@@ -82447,7 +82802,7 @@ class EventSourceStream extends Transform {
         continue
       }
 
-      this.pos++
+      this.advanceCursor()
     }
 
     callback()
@@ -82472,64 +82827,53 @@ class EventSourceStream extends Transform {
       return
     }
 
-    let field = ''
-    let value = ''
+    let fieldLength = line.length
+    let valueStart = line.length
 
     // If the line contains a U+003A COLON character (:)
     if (colonPosition !== -1) {
-      // Collect the characters on the line before the first U+003A COLON
-      // character (:), and let field be that string.
-      // TODO: Investigate if there is a more performant way to extract the
-      // field
-      // see: https://github.com/nodejs/undici/issues/2630
-      field = line.subarray(0, colonPosition).toString('utf8')
+      fieldLength = colonPosition
 
       // Collect the characters on the line after the first U+003A COLON
       // character (:), and let value be that string.
       // If value starts with a U+0020 SPACE character, remove it from value.
-      let valueStart = colonPosition + 1
+      valueStart = colonPosition + 1
       if (line[valueStart] === SPACE) {
         ++valueStart
       }
-      // TODO: Investigate if there is a more performant way to extract the
-      // value
-      // see: https://github.com/nodejs/undici/issues/2630
-      value = line.subarray(valueStart).toString('utf8')
-
-      // Otherwise, the string is not empty but does not contain a U+003A COLON
-      // character (:)
-    } else {
-      // Process the field using the steps described below, using the whole
-      // line as the field name, and the empty string as the field value.
-      field = line.toString('utf8')
-      value = ''
     }
 
-    // Modify the event with the field name and value. The value is also
-    // decoded as UTF-8
-    switch (field) {
-      case 'data':
-        if (event[field] === undefined) {
-          event[field] = value
-        } else {
-          event[field] += `\n${value}`
-        }
-        break
-      case 'retry':
-        if (isASCIINumber(value)) {
-          event[field] = value
-        }
-        break
-      case 'id':
-        if (isValidLastEventId(value)) {
-          event[field] = value
-        }
-        break
-      case 'event':
-        if (value.length > 0) {
-          event[field] = value
-        }
-        break
+    if (isFieldName(line, fieldLength, DATA)) {
+      const value = line.toString('utf8', valueStart)
+
+      if (event.data === undefined) {
+        event.data = value
+      } else {
+        event.data += `\n${value}`
+      }
+      return
+    }
+
+    if (isFieldName(line, fieldLength, RETRY)) {
+      if (isASCIINumberBytes(line, valueStart)) {
+        event.retry = line.toString('utf8', valueStart)
+      }
+      return
+    }
+
+    if (isFieldName(line, fieldLength, ID)) {
+      if (isValidLastEventIdBytes(line, valueStart)) {
+        event.id = line.toString('utf8', valueStart)
+      }
+      return
+    }
+
+    if (isFieldName(line, fieldLength, EVENT)) {
+      const value = line.toString('utf8', valueStart)
+
+      if (value.length > 0) {
+        event.event = value
+      }
     }
   }
 
@@ -82559,12 +82903,151 @@ class EventSourceStream extends Transform {
   }
 
   clearEvent () {
-    this.event = {
-      data: undefined,
-      event: undefined,
-      id: undefined,
-      retry: undefined
+    this.event.data = undefined
+    this.event.event = undefined
+    this.event.id = undefined
+    this.event.retry = undefined
+  }
+
+  hasPendingEvent () {
+    return this.event.data !== undefined ||
+      this.event.event !== undefined ||
+      this.event.id !== undefined ||
+      this.event.retry !== undefined
+  }
+
+  hasCurrentByte () {
+    return this.chunkIndex < this.chunks.length &&
+      this.pos < this.chunks[this.chunkIndex].length
+  }
+
+  currentByte () {
+    return this.chunks[this.chunkIndex][this.pos]
+  }
+
+  consumeCurrentByte () {
+    this.advanceCursor()
+    this.syncLineStartToCursor()
+  }
+
+  advanceCursor () {
+    this.pos++
+
+    while (this.chunkIndex < this.chunks.length && this.pos >= this.chunks[this.chunkIndex].length) {
+      this.chunkIndex++
+      this.pos = 0
     }
+  }
+
+  syncLineStartToCursor () {
+    this.lineChunkIndex = this.chunkIndex
+    this.linePos = this.pos
+    this.dropConsumedChunks()
+  }
+
+  dropConsumedChunks () {
+    while (this.lineChunkIndex > 0) {
+      this.chunks.shift()
+      this.lineChunkIndex--
+      this.chunkIndex--
+    }
+
+    if (this.chunkIndex === this.chunks.length) {
+      this.chunks.length = 0
+      this.chunkIndex = 0
+      this.pos = 0
+      this.lineChunkIndex = 0
+      this.linePos = 0
+    }
+  }
+
+  readLine () {
+    if (this.lineChunkIndex === this.chunkIndex) {
+      return this.chunks[this.chunkIndex].subarray(this.linePos, this.pos)
+    }
+
+    const chunks = []
+    let length = 0
+
+    for (let i = this.lineChunkIndex; i <= this.chunkIndex; i++) {
+      const chunk = this.chunks[i]
+      const start = i === this.lineChunkIndex ? this.linePos : 0
+      const end = i === this.chunkIndex ? this.pos : chunk.length
+      const slice = chunk.subarray(start, end)
+      length += slice.length
+      chunks.push(slice)
+    }
+
+    return Buffer.concat(chunks, length)
+  }
+
+  peekBufferedByte (offset) {
+    let chunkIndex = this.lineChunkIndex
+    let pos = this.linePos
+
+    while (chunkIndex < this.chunks.length) {
+      const chunk = this.chunks[chunkIndex]
+      const remaining = chunk.length - pos
+
+      if (offset < remaining) {
+        return chunk[pos + offset]
+      }
+
+      offset -= remaining
+      chunkIndex++
+      pos = 0
+    }
+  }
+
+  discardLeadingBytes (count) {
+    while (count > 0 && this.lineChunkIndex < this.chunks.length) {
+      const chunk = this.chunks[this.lineChunkIndex]
+      const remaining = chunk.length - this.linePos
+
+      if (count < remaining) {
+        this.linePos += count
+        count = 0
+      } else {
+        count -= remaining
+        this.lineChunkIndex++
+        this.linePos = 0
+      }
+    }
+
+    this.chunkIndex = this.lineChunkIndex
+    this.pos = this.linePos
+    this.dropConsumedChunks()
+  }
+
+  handleBOM () {
+    const first = this.peekBufferedByte(0)
+    const second = this.peekBufferedByte(1)
+    const third = this.peekBufferedByte(2)
+
+    if (second === undefined) {
+      if (first === BOM[0]) {
+        return true
+      }
+
+      this.checkBOM = false
+      return true
+    }
+
+    if (third === undefined) {
+      if (first === BOM[0] && second === BOM[1]) {
+        return true
+      }
+
+      this.checkBOM = false
+      return false
+    }
+
+    if (first === BOM[0] && second === BOM[1] && third === BOM[2]) {
+      this.discardLeadingBytes(3)
+    }
+
+    this.checkBOM = false
+    return !this.hasCurrentByte()
   }
 }
 
@@ -93833,7 +94316,7 @@ function establishWebSocketConnection (url, protocols, client, ws, onEstablish, 
         // is specified, the server needs to include the same field and one of
         // the selected subprotocol values in its response for the connection to
         // be established.
-        if (!requestProtocols.includes(secProtocol)) {
+        if (requestProtocols === null || !requestProtocols.includes(secProtocol)) {
           failWebsocketConnection(ws, 'Protocol was not set in the opening handshake.')
           return
         }
@@ -94594,7 +95077,12 @@ class PerMessageDeflate {
 
         if (this.#maxPayloadSize > 0 && this.#inflate[kLength] > this.#maxPayloadSize) {
           callback(new MessageSizeExceededError())
+          // The inflater may still hold buffered input that can emit a late
+          // zlib error. Remove the data listener, then deterministically stop
+          // the stream so a subsequent 'error' cannot fire without a listener
+          // (which would terminate the process as an unhandled error event).
           this.#inflate.removeAllListeners()
+          this.#inflate.destroy()
           this.#inflate = null
           return
         }
@@ -110765,8 +111253,8 @@ function internal_pattern_helper_partialMatch(patterns, itemPath) {
     return patterns.some(x => !x.negate && x.partialMatch(itemPath));
 }
 //# sourceMappingURL=internal-pattern-helper.js.map
-// EXTERNAL MODULE: ./node_modules/@actions/glob/node_modules/minimatch/minimatch.js
-var minimatch = __nccwpck_require__(29526);
+// EXTERNAL MODULE: ./node_modules/minimatch/minimatch.js
+var minimatch = __nccwpck_require__(43772);
 ;// CONCATENATED MODULE: ./node_modules/@actions/glob/lib/internal-path.js
 
 
@@ -112905,9 +113393,6 @@ class NodeHttpClient {
                 body = uploadReportStream;
             }
             const res = await this.makeRequest(request, abortController, body);
-            if (timeoutId !== undefined) {
-                clearTimeout(timeoutId);
-            }
             const headers = getResponseHeaders(res);
             const status = res.statusCode ?? 0;
             const response = {
@@ -112945,6 +113430,9 @@ class NodeHttpClient {
             return response;
         }
         finally {
+            if (timeoutId !== undefined) {
+                clearTimeout(timeoutId);
+            }
             // clean up event listener
             if (request.abortSignal && abortListener) {
                 let uploadStreamDone = Promise.resolve();
@@ -113518,7 +114006,7 @@ function isSystemError(err) {
 ;// CONCATENATED MODULE: ./node_modules/@typespec/ts-http-runtime/dist/esm/constants.js
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
-const constants_SDK_VERSION = "0.3.7";
+const constants_SDK_VERSION = "0.3.9";
 const constants_DEFAULT_RETRY_POLICY_COUNT = 3;
 //# sourceMappingURL=constants.js.map
 ;// CONCATENATED MODULE: ./node_modules/@typespec/ts-http-runtime/dist/esm/policies/retryPolicy.js
@@ -113547,7 +114035,6 @@ function retryPolicy_retryPolicy(strategies, options = { maxRetries: constants_D
             let retryCount = -1;
             retryRequest: while (true) {
                 retryCount += 1;
-                response = undefined;
                 responseError = undefined;
                 try {
                     logger.info(`Retry ${retryCount}: Attempting to send request`, request.requestId);
@@ -114766,14 +115253,17 @@ function getContentType(body) {
 function buildPipelineRequest(method, url, options = {}) {
     const requestContentType = getRequestContentType(options);
     const { body, multipartBody } = getRequestBody(options.body, requestContentType);
+    const accept = options.accept ??
+        options.headers?.accept ??
+        (options.noDefaultAcceptHeader ? undefined : "application/json");
     const headers = createHttpHeaders({
         ...(options.headers ? options.headers : {}),
-        accept: options.accept ?? options.headers?.accept ?? "application/json",
+        ...(accept !== undefined && { accept }),
         ...(requestContentType && {
             "content-type": requestContentType,
         }),
     });
-    const { allowInsecureConnection, abortSignal, onUploadProgress, onDownloadProgress, timeout, responseAsStream, url: _url, method: _method, body: _body, multipartBody: _multiBody, headers: _headers, ...rest } = options;
+    const { allowInsecureConnection, abortSignal, onUploadProgress, onDownloadProgress, timeout, responseAsStream, noDefaultAcceptHeader: _noDefaultAcceptHeader, url: _url, method: _method, body: _body, multipartBody: _multiBody, headers: _headers, ...rest } = options;
     const request = createPipelineRequest({
         url,
         method,
@@ -114880,8 +115370,7 @@ function createParseError(response, err) {
 /**
  * Creates a client with a default pipeline
  * @param endpoint - Base endpoint for the client
- * @param credentials - Credentials to authenticate the requests
- * @param options - Client options
+ * @param clientOptions - Client options
  */
 function getClient(endpoint, clientOptions = {}) {
     const pipeline = clientOptions.pipeline ?? createDefaultPipeline(clientOptions);
@@ -114895,34 +115384,35 @@ function getClient(endpoint, clientOptions = {}) {
             });
         }
     }
+    const noDefaultAcceptHeader = clientOptions.internal?.noDefaultAcceptHeader ?? false;
     const { allowInsecureConnection, httpClient } = clientOptions;
     const endpointUrl = clientOptions.endpoint ?? endpoint;
     const client = (path, ...args) => {
         const getUrl = (requestOptions) => buildRequestUrl(endpointUrl, path, args, { allowInsecureConnection, ...requestOptions });
         return {
             get: (requestOptions = {}) => {
-                return buildOperation("GET", getUrl(requestOptions), pipeline, requestOptions, allowInsecureConnection, httpClient);
+                return buildOperation("GET", getUrl(requestOptions), pipeline, requestOptions, allowInsecureConnection, httpClient, noDefaultAcceptHeader);
             },
             post: (requestOptions = {}) => {
-                return buildOperation("POST", getUrl(requestOptions), pipeline, requestOptions, allowInsecureConnection, httpClient);
+                return buildOperation("POST", getUrl(requestOptions), pipeline, requestOptions, allowInsecureConnection, httpClient, noDefaultAcceptHeader);
             },
             put: (requestOptions = {}) => {
-                return buildOperation("PUT", getUrl(requestOptions), pipeline, requestOptions, allowInsecureConnection, httpClient);
+                return buildOperation("PUT", getUrl(requestOptions), pipeline, requestOptions, allowInsecureConnection, httpClient, noDefaultAcceptHeader);
             },
             patch: (requestOptions = {}) => {
-                return buildOperation("PATCH", getUrl(requestOptions), pipeline, requestOptions, allowInsecureConnection, httpClient);
+                return buildOperation("PATCH", getUrl(requestOptions), pipeline, requestOptions, allowInsecureConnection, httpClient, noDefaultAcceptHeader);
             },
             delete: (requestOptions = {}) => {
-                return buildOperation("DELETE", getUrl(requestOptions), pipeline, requestOptions, allowInsecureConnection, httpClient);
+                return buildOperation("DELETE", getUrl(requestOptions), pipeline, requestOptions, allowInsecureConnection, httpClient, noDefaultAcceptHeader);
             },
             head: (requestOptions = {}) => {
-                return buildOperation("HEAD", getUrl(requestOptions), pipeline, requestOptions, allowInsecureConnection, httpClient);
+                return buildOperation("HEAD", getUrl(requestOptions), pipeline, requestOptions, allowInsecureConnection, httpClient, noDefaultAcceptHeader);
             },
             options: (requestOptions = {}) => {
-                return buildOperation("OPTIONS", getUrl(requestOptions), pipeline, requestOptions, allowInsecureConnection, httpClient);
+                return buildOperation("OPTIONS", getUrl(requestOptions), pipeline, requestOptions, allowInsecureConnection, httpClient, noDefaultAcceptHeader);
             },
             trace: (requestOptions = {}) => {
-                return buildOperation("TRACE", getUrl(requestOptions), pipeline, requestOptions, allowInsecureConnection, httpClient);
+                return buildOperation("TRACE", getUrl(requestOptions), pipeline, requestOptions, allowInsecureConnection, httpClient, noDefaultAcceptHeader);
             },
         };
     };
@@ -114932,23 +115422,23 @@ function getClient(endpoint, clientOptions = {}) {
         pipeline,
     };
 }
-function buildOperation(method, url, pipeline, options, allowInsecureConnection, httpClient) {
+function buildOperation(method, url, pipeline, options, allowInsecureConnection, httpClient, noDefaultAcceptHeader = false) {
     allowInsecureConnection = options.allowInsecureConnection ?? allowInsecureConnection;
     return {
         then: function (onFulfilled, onrejected) {
-            return sendRequest(method, url, pipeline, { ...options, allowInsecureConnection }, httpClient).then(onFulfilled, onrejected);
+            return sendRequest(method, url, pipeline, { ...options, allowInsecureConnection, noDefaultAcceptHeader }, httpClient).then(onFulfilled, onrejected);
         },
         async asBrowserStream() {
             if (isNodeLike) {
                 throw new Error("`asBrowserStream` is supported only in the browser environment. Use `asNodeStream` instead to obtain the response body stream. If you require a Web stream of the response in Node, consider using `Readable.toWeb` on the result of `asNodeStream`.");
             }
             else {
-                return sendRequest(method, url, pipeline, { ...options, allowInsecureConnection, responseAsStream: true }, httpClient);
+                return sendRequest(method, url, pipeline, { ...options, allowInsecureConnection, noDefaultAcceptHeader, responseAsStream: true }, httpClient);
             }
         },
         async asNodeStream() {
             if (isNodeLike) {
-                return sendRequest(method, url, pipeline, { ...options, allowInsecureConnection, responseAsStream: true }, httpClient);
+                return sendRequest(method, url, pipeline, { ...options, allowInsecureConnection, noDefaultAcceptHeader, responseAsStream: true }, httpClient);
             }
             else {
                 throw new Error("`isNodeStream` is not supported in the browser environment. Use `asBrowserStream` to obtain the response body stream.");
@@ -118885,7 +119375,7 @@ function serializeRequestBody(request, operationArguments, operationSpec, string
             }
         }
         catch (error) {
-            throw new Error(`Error "${error.message}" occurred in serializing the payload - ${JSON.stringify(serializedName, undefined, "  ")}.`);
+            throw new Error(`Error "${error.message}" occurred in serializing the payload - ${JSON.stringify(serializedName, undefined, "  ")}.`, { cause: error });
         }
     }
     else if (operationSpec.formDataParameters && operationSpec.formDataParameters.length > 0) {
@@ -120950,19 +121440,26 @@ class Matcher {
 ;// CONCATENATED MODULE: ./node_modules/fast-xml-builder/src/util.js
 
 
+// String(val)/val.toString() drop the sign of -0 (e.g. String(-0) === '0'), silently
+// corrupting a round-tripped negative-zero value. XML has no separate int/float syntax,
+// so this is the single place every raw value gets turned into text.
+function valToStr(val) {
+  return typeof val === 'number' && Object.is(val, -0) ? '-0' : String(val)
+}
+
 function safeComment(val) {
-  return String(val)
+  return valToStr(val)
     .replace(/--/g, '- -')   // -- is illegal anywhere in comment content
     .replace(/--/g, '- -')   // handle the scenario when 2 consiucative dashes appears 
     .replace(/-$/, '- ');    // trailing - would form -- with the closing -->
 }
 
 function safeCdata(val) {
-  return String(val).replace(/\]\]>/g, ']]]]><![CDATA[>')
+  return valToStr(val).replace(/\]\]>/g, ']]]]><![CDATA[>')
 }
 
 function escapeAttribute(val) {
-  return String(val).replace(/"/g, '&quot;').replace(/'/g, '&apos;')
+  return valToStr(val).replace(/"/g, '&quot;').replace(/'/g, '&apos;')
 }
 ;// CONCATENATED MODULE: ./node_modules/xml-naming/src/index.js
 /**
@@ -121438,7 +121935,7 @@ function arrToStr(arr, options, indentation, matcher, stopNodeExpressions, qName
     if (!Array.isArray(arr)) {
         // Non-array values (e.g. string tag values) should be treated as text content
         if (arr !== undefined && arr !== null) {
-            let text = arr.toString();
+            let text = valToStr(arr);
             text = replaceEntitiesValue(text, options);
             return text;
         }
@@ -121477,6 +121974,7 @@ function arrToStr(arr, options, indentation, matcher, stopNodeExpressions, qName
                 tagText = options.tagValueProcessor(tagName, tagText);
                 tagText = replaceEntitiesValue(tagText, options);
             }
+            tagText = valToStr(tagText);
             if (isPreviousElementTag) {
                 xmlStr += indentation;
             }
@@ -121585,7 +122083,7 @@ function orderedJs2Xml_getRawContent(arr, options) {
     if (!Array.isArray(arr)) {
         // Non-array values return as-is
         if (arr !== undefined && arr !== null) {
-            return arr.toString();
+            return valToStr(arr);
         }
         return "";
     }
@@ -121597,7 +122095,7 @@ function orderedJs2Xml_getRawContent(arr, options) {
 
         if (tagName === options.textNodeName) {
             // Raw text content - NO processing, NO entity replacement
-            content += item[tagName];
+            content += valToStr(item[tagName]);
         } else if (tagName === options.cdataPropName) {
             // CDATA content
             content += item[tagName][0][options.textNodeName];
@@ -121938,11 +122436,11 @@ Builder.prototype.j2x = function (jObj, level, matcher, qNameValidator) {
       if (attr && !this.ignoreAttributesFn(attr, jPath)) {
         // Resolve the attribute name through sanitizeName
         const resolvedAttr = fxb_resolveTagName(attr, true, this.options, matcher, qNameValidator);
-        attrStr += this.buildAttrPairStr(resolvedAttr, '' + jObj[key], isCurrentStopNode);
+        attrStr += this.buildAttrPairStr(resolvedAttr, valToStr(jObj[key]), isCurrentStopNode);
       } else if (!attr) {
         //tag value
         if (key === this.options.textNodeName) {
-          let newval = this.options.tagValueProcessor(key, '' + jObj[key]);
+          let newval = this.options.tagValueProcessor(key, valToStr(jObj[key]));
           val += this.replaceEntitiesValue(newval);
         } else {
           // Check if this is a stopNode before building
@@ -121952,7 +122450,7 @@ Builder.prototype.j2x = function (jObj, level, matcher, qNameValidator) {
 
           if (isStopNode) {
             // Build as raw content without encoding
-            const textValue = '' + jObj[key];
+            const textValue = valToStr(jObj[key]);
             if (textValue === '') {
               val += this.indentate(level) + '<' + resolvedKey + this.closeTag(resolvedKey) + this.tagEndChar;
             } else {
@@ -121994,6 +122492,7 @@ Builder.prototype.j2x = function (jObj, level, matcher, qNameValidator) {
           if (this.options.oneListGroup) {
             let textValue = this.options.tagValueProcessor(resolvedKey, item);
             textValue = this.replaceEntitiesValue(textValue);
+            textValue = valToStr(textValue);
             listTagVal += textValue;
           } else {
             // Check if this is a stopNode before building
@@ -122003,7 +122502,7 @@ Builder.prototype.j2x = function (jObj, level, matcher, qNameValidator) {
 
             if (isStopNode) {
               // Build as raw content without encoding
-              const textValue = '' + item;
+              const textValue = valToStr(item);
               if (textValue === '') {
                 listTagVal += this.indentate(level) + '<' + resolvedKey + this.closeTag(resolvedKey) + this.tagEndChar;
               } else {
@@ -122027,7 +122526,7 @@ Builder.prototype.j2x = function (jObj, level, matcher, qNameValidator) {
         for (let j = 0; j < L; j++) {
           // Resolve attribute names inside attributesGroupName
           const resolvedAttr = fxb_resolveTagName(Ks[j], true, this.options, matcher, qNameValidator);
-          attrStr += this.buildAttrPairStr(resolvedAttr, '' + jObj[key][Ks[j]], isCurrentStopNode);
+          attrStr += this.buildAttrPairStr(resolvedAttr, valToStr(jObj[key][Ks[j]]), isCurrentStopNode);
         }
       } else {
         val += this.processTextOrObjNode(jObj[key], resolvedKey, level, matcher, qNameValidator)
@@ -122039,7 +122538,7 @@ Builder.prototype.j2x = function (jObj, level, matcher, qNameValidator) {
 
 Builder.prototype.buildAttrPairStr = function (attrName, val, isStopNode) {
   if (!isStopNode) {
-    val = this.options.attributeValueProcessor(attrName, '' + val);
+    val = this.options.attributeValueProcessor(attrName, valToStr(val));
     val = this.replaceEntitiesValue(val);
   }
   if (this.options.suppressBooleanAttributes && val === "true") {
@@ -122299,6 +122798,10 @@ Builder.prototype.buildTextValNode = function (val, key, attrStr, level, matcher
     // Normal processing: apply tagValueProcessor and entity replacement
     let textValue = this.options.tagValueProcessor(key, val);
     textValue = this.replaceEntitiesValue(textValue);
+    // tagValueProcessor may return the raw value unchanged (default is identity), and
+    // replaceEntitiesValue no-ops on non-strings, so a plain number can still reach here;
+    // stringify it now, sign-preserving, before it's implicitly ToString'd below.
+    textValue = valToStr(textValue);
 
     if (textValue === '') {
       return this.indentate(level) + '<' + key + attrStr + this.closeTag(key) + this.tagEndChar;
@@ -122713,9 +123216,102 @@ function readAttributeStr(xmlData, i) {
 }
 
 /**
- * Select all the attributes whether valid or invalid.
+ * Walk `attrStr` once, left to right, splitting it into attribute tokens.
+ *
+ * This replaces a regex that used to do the same job
+ * (`(\s*)([^\s=]+)(\s*=)?(\s*(['"])(([\s\S])*?)\5)?`). That regex led with an
+ * optional whitespace group followed by a required "non-whitespace" group.
+ * On a long run of whitespace that never resolves into an attribute name
+ * (e.g. a tag with thousands of trailing spaces before `>`), the engine
+ * backtracks the whitespace group one character at a time before giving up
+ * and moving to the next starting position — one full backtrack per
+ * position, which is quadratic in the length of the run.
+ *
+ * A single forward-only scan can never backtrack, so it can't be made slow
+ * this way no matter how much whitespace the input contains — it's always
+ * proportional to the length of the string, once.
+ *
+ * Each returned token mirrors the shape the old regex match array had, so
+ * the validation logic below (which reads token[1]..token[6]) didn't need
+ * to change:
+ *   token.startIndex - where this token begins in attrStr
+ *   token[1]          - leading whitespace before the name
+ *   token[2]          - the attribute name
+ *   token[3]          - whitespace + '=' if present, else undefined
+ *   token[4]          - marker (any defined value) if a quoted value was found
+ *   token[5]          - the quote character used ('"' or "'")
+ *   token[6]          - the value's text, without the surrounding quotes
+ *
+ * A malformed leading character (e.g. a stray '=' with no name before it)
+ * is simply skipped over, one character at a time — the same outcome the
+ * old regex produced by failing to match at that position and retrying at
+ * the next one.
  */
-const validAttrStrRegxp = new RegExp('(\\s*)([^\\s=]+)(\\s*=)?(\\s*([\'"])(([\\s\\S])*?)\\5)?', 'g');
+function scanAttributeTokens(attrStr) {
+  const tokens = [];
+  const len = attrStr.length;
+  let i = 0;
+
+  while (i < len) {
+    const tokenStart = i;
+
+    // Leading whitespace before the name.
+    while (i < len && isWhiteSpace(attrStr[i])) i++;
+    if (i >= len) break; // trailing whitespace only — nothing left to read
+
+    if (attrStr[i] === '=') {
+      // No name before this '=' — not a valid attribute start. Move past
+      // just this one character and try again from the next position.
+      i = tokenStart + 1;
+      continue;
+    }
+
+    const leadingWs = attrStr.slice(tokenStart, i);
+
+    // Attribute name — everything up to the next whitespace or '='.
+    const nameStart = i;
+    while (i < len && !isWhiteSpace(attrStr[i]) && attrStr[i] !== '=') i++;
+    const name = attrStr.slice(nameStart, i);
+
+    // Optional whitespace + '='.
+    let equalsGroup; // whitespace + '=' text, or undefined if absent
+    let j = i;
+    while (j < len && isWhiteSpace(attrStr[j])) j++;
+    if (j < len && attrStr[j] === '=') {
+      equalsGroup = attrStr.slice(i, j + 1);
+      i = j + 1;
+    }
+
+    // Optional whitespace + quoted value.
+    let quoteChar;
+    let value;
+    let k = i;
+    while (k < len && isWhiteSpace(attrStr[k])) k++;
+    if (k < len && (attrStr[k] === '"' || attrStr[k] === "'")) {
+      const valueStart = k + 1;
+      const closeIdx = attrStr.indexOf(attrStr[k], valueStart);
+      if (closeIdx !== -1) {
+        quoteChar = attrStr[k];
+        value = attrStr.slice(valueStart, closeIdx);
+        i = closeIdx + 1;
+      }
+      // No closing quote found anywhere in the rest of the string — leave
+      // quoteChar/value undefined, same as the old regex's group failing
+      // to match a backreference-less run.
+    }
+
+    const token = { startIndex: tokenStart };
+    token[1] = leadingWs;
+    token[2] = name;
+    token[3] = equalsGroup;
+    token[4] = quoteChar !== undefined ? true : undefined;
+    token[5] = quoteChar;
+    token[6] = value;
+    tokens.push(token);
+  }
+
+  return tokens;
+}
 
 //attr, ="sd", a="amit's", a="sd"b="saf", ab  cd=""
 
@@ -122724,7 +123320,7 @@ function validateAttributeString(attrStr, options) {
 
   //if(attrStr.trim().length === 0) return true; //empty string
 
-  const matches = getAllMatches(attrStr, validAttrStrRegxp);
+  const matches = scanAttributeTokens(attrStr);
   const attrNames = {};
 
   for (let i = 0; i < matches.length; i++) {
@@ -122826,7 +123422,6 @@ function getLineNumberForPosition(xmlData, index) {
 function getPositionFromMatch(match) {
   return match.startIndex + match[1].length;
 }
-
 ;// CONCATENATED MODULE: ./node_modules/fast-xml-parser/src/fxp.js
 
 
@@ -123033,10 +123628,24 @@ class XmlNode {
       this.child.push({ [node.tagname]: node.child });
     }
     // if requested, add the startIndex
+    this.addStartIndex(startIndex);
+  }
+
+  addStartIndex(startIndex) {
     if (startIndex !== undefined) {
       // Note: for now we just overwrite the metadata. If we had more complex metadata,
       // we might need to do an object append here:  metadata = { ...metadata, startIndex }
       this.child[this.child.length - 1][METADATA_SYMBOL] = { startIndex };
+    }
+  }
+
+  addEndIndex(endIndex) {
+    const lastChild = this.child[this.child.length - 1];
+    // endIndex is write-once: when updateTag drops a node, the last child is a
+    // previously completed sibling whose endIndex must not be overwritten
+    if (lastChild !== undefined && lastChild[METADATA_SYMBOL] !== undefined
+      && lastChild[METADATA_SYMBOL].endIndex === undefined) {
+      lastChild[METADATA_SYMBOL].endIndex = endIndex;
     }
   }
   /** symbol used for metadata */
@@ -123071,8 +123680,23 @@ class DocTypeReader {
             i = i + 9;
             let angleBracketsCount = 1;
             let hasBody = false, comment = false;
+            let quoteChar = null; // tracks an open SYSTEM/PUBLIC literal before the '[' body
             let exp = "";
             for (; i < xmlData.length; i++) {
+                // Inside a quoted external-identifier literal — XML allows '<'
+                // and '>' as plain data here, so they must not be interpreted
+                // as DOCTYPE structure until the matching quote closes.
+                if (quoteChar !== null) {
+                    if (xmlData[i] === quoteChar) quoteChar = null;
+                    exp += xmlData[i];
+                    continue;
+                }
+                if (!hasBody && !comment && (xmlData[i] === '"' || xmlData[i] === "'")) {
+                    quoteChar = xmlData[i];
+                    exp += xmlData[i];
+                    continue;
+                }
+
                 if (xmlData[i] === '<' && !comment) { //Determine the tag type
                     if (hasBody && hasSeq(xmlData, "!ENTITY", i)) {
                         i += 7;
@@ -123127,7 +123751,7 @@ class DocTypeReader {
                     exp += xmlData[i];
                 }
             }
-            if (angleBracketsCount !== 0) {
+            if (quoteChar !== null || angleBracketsCount !== 0) {
                 throw new Error(`Unclosed DOCTYPE`);
             }
         } else {
@@ -123842,7 +124466,11 @@ function resolveEnotation(str, trimmedStr, options) {
  */
 function trimZeros(numStr) {
     if (numStr && numStr.indexOf(".") !== -1) {//float
-        numStr = numStr.replace(/0+$/, ""); //remove ending zeros
+        //remove ending zeros without the O(n^2) backtracking that /0+$/ hits
+        //when the string doesn't end in 0 but has a long internal zero-run
+        let end = numStr.length;
+        while (end > 0 && numStr.charCodeAt(end - 1) === 48 /* '0' */) end--;
+        numStr = numStr.slice(0, end);
         if (numStr === ".") numStr = "0";
         else if (numStr[0] === ".") numStr = "0" + numStr;
         else if (numStr[numStr.length - 1] === ".") numStr = numStr.substring(0, numStr.length - 1);
@@ -125236,26 +125864,6 @@ const MISC_SYMBOLS = {
   nVDash: '⊯',
 };
 
-/**
- * All entities combined (if you need everything)
- * @type {Record<string, string>}
- */
-const ALL_ENTITIES = {
-  ...BASIC_LATIN,
-  ...LATIN_ACCENTS,
-  ...LATIN_EXTENDED,
-  ...GREEK,
-  ...CYRILLIC,
-  ...MATH,
-  ...MATH_ADVANCED,
-  ...ARROWS,
-  ...SHAPES,
-  ...PUNCTUATION,
-  ...CURRENCY,
-  ...FRACTIONS,
-  ...MISC_SYMBOLS,
-};
-
 const XML = {
   amp: "&",
   apos: "'",
@@ -126243,7 +126851,8 @@ const XML_PATTERNS = [
   {
     id: 'xml-namespace-confusion',
     description: 'xmlns: attribute injection — can redefine namespaces to confuse parsers',
-    pattern: /\bxmlns\s*(?::\w{1,40})?\s*=/i,
+    // pattern: /\bxmlns\s*(?::\w{1,40})?\s*=/i,
+    pattern: /\bxmlns(?::\w{1,40})?\s*=/i,
   },
   {
     id: 'xml-comment-injection',
@@ -127089,6 +127698,7 @@ class OrderedObjParser {
     this.ignoreAttributesFn = ignoreAttributes_getIgnoreAttributesFn(this.options.ignoreAttributes)
     this.entityExpansionCount = 0;
     this.currentExpandedLength = 0;
+    this.doctypefound = false;
     let namedEntities = { ...XML };
     if (this.options.entityDecoder) {
       this.entityDecoder = this.options.entityDecoder
@@ -127296,6 +127906,7 @@ const parseXml = function (xmlData) {
   // Reset entity expansion counters for this document
   this.entityExpansionCount = 0;
   this.currentExpandedLength = 0;
+  this.doctypefound = false;
   const options = this.options;
   const docTypeReader = new DocTypeReader(options.processEntities);
   const xmlLen = xmlData.length;
@@ -127336,7 +127947,12 @@ const parseXml = function (xmlData) {
         this.matcher.pop();
         this.isCurrentNodeStopNode = false; // Reset flag when closing tag
 
-        currentNode = this.tagsNodeStack.pop();//avoid recursion, set the parent tag scope
+        //a closing tag with no matching opening tag leaves the stack empty
+        currentNode = this.tagsNodeStack.pop() || xmlObj;//avoid recursion, set the parent tag scope
+
+        if (options.captureMetaData && currentNode) {
+          currentNode.addEndIndex(closeIndex + 1);
+        }
         textData = "";
         i = closeIndex;
       } else if (c1 === 63) { //'?'
@@ -127362,6 +127978,11 @@ const parseXml = function (xmlData) {
             childNode[":@"] = attsMap
           }
           this.addChild(currentNode, childNode, this.readonlyMatcher, i);
+
+          if (options.captureMetaData) {
+            // closeIndex points at '?' of the closing '?>'
+            currentNode.addEndIndex(tagData.closeIndex + 2);
+          }
         }
 
 
@@ -127380,6 +128001,8 @@ const parseXml = function (xmlData) {
         i = endIndex;
       } else if (c1 === 33
         && xmlData.charCodeAt(i + 2) === 68) { //'!D'
+        if (this.doctypefound) throw new Error("Multiple DOCTYPE declarations found.");
+        this.doctypefound = true;
         const result = docTypeReader.readDocType(xmlData, i);
         this.entityDecoder.addInputEntities(result.entities);
         i = result.i;
@@ -127524,6 +128147,10 @@ const parseXml = function (xmlData) {
           this.isCurrentNodeStopNode = false; // Reset flag
 
           this.addChild(currentNode, childNode, this.readonlyMatcher, startIndex);
+
+          if (options.captureMetaData) {
+            currentNode.addEndIndex(i + 1);
+          }
         } else {
           //selfClosing tag
           if (isSelfClosing) {
@@ -127534,6 +128161,10 @@ const parseXml = function (xmlData) {
               childNode[":@"] = prefixedAttrs;
             }
             this.addChild(currentNode, childNode, this.readonlyMatcher, startIndex);
+
+            if (options.captureMetaData) {
+              currentNode.addEndIndex(closeIndex + 1);
+            }
             this.matcher.pop(); // Pop self-closing tag
             this.isCurrentNodeStopNode = false; // Reset flag
           }
@@ -127543,6 +128174,10 @@ const parseXml = function (xmlData) {
               childNode[":@"] = prefixedAttrs;
             }
             this.addChild(currentNode, childNode, this.readonlyMatcher, startIndex);
+
+            if (options.captureMetaData) {
+              currentNode.addEndIndex(result.closeIndex + 1);
+            }
             this.matcher.pop(); // Pop unpaired tag
             this.isCurrentNodeStopNode = false; // Reset flag
             i = result.closeIndex;
@@ -128668,41 +129303,12 @@ class BufferScheduler {
     }
 }
 //# sourceMappingURL=BufferScheduler.js.map
-;// CONCATENATED MODULE: external "node:module"
-const external_node_module_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:module");
-;// CONCATENATED MODULE: external "node:path"
-const external_node_path_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:path");
 ;// CONCATENATED MODULE: ./node_modules/@azure/storage-common/dist/esm/crc64.js
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// ESM-COMPAT-START (this block is stripped from dist/commonjs by copyJSFiles.cjs)
-// In ESM under Node, `require`, `__filename`, and `__dirname` are not defined.
-// Synthesize them from `import.meta.url` so the Emscripten Node branch below works as-is.
-// Specifiers are held in variables to prevent web bundlers from statically resolving `node:*`.
-// The detection check below MUST stay byte-for-byte identical to the Emscripten-generated
-// `ENVIRONMENT_IS_NODE` check later in this file; otherwise the polyfill and the Node branch
-// can disagree and the ESM `ReferenceError: require is not defined` bug returns.
-
-
-
-const __isNode__ =
-  typeof process === "object" &&
-  typeof process.versions === "object" &&
-  typeof process.versions.node === "string";
-let crc64_require;
-let crc64_filename;
-let crc64_dirname;
-if (__isNode__) {
-  crc64_require = (0,external_node_module_namespaceObject.createRequire)(import.meta.url);
-  crc64_filename = (0,external_node_url_.fileURLToPath)(import.meta.url);
-  crc64_dirname = (0,external_node_path_namespaceObject.dirname)(crc64_filename);
-}
-// ESM-COMPAT-END
-
 var NativeCRC64 = (() => {
   var _scriptDir = typeof document !== 'undefined' && document.currentScript ? document.currentScript.src : undefined;
-  if (typeof crc64_filename !== 'undefined') _scriptDir = _scriptDir || crc64_filename;
   return (
 function(NativeCRC64) {
   NativeCRC64 = NativeCRC64 || {};
@@ -128808,52 +129414,10 @@ function logExceptionOnExit(e) {
 
 if (ENVIRONMENT_IS_NODE) {
   if (typeof process == 'undefined' || !process.release || process.release.name !== 'node') throw new Error('not compiled for this environment (did you build to HTML and try to run it not on the web, or set ENVIRONMENT to something - like node - and run it someplace else - like on the web?)');
-// NODE-READ-START (this block is replaced with a no-op in dist/browser and dist/react-native by copyJSFiles.cjs)
-  // `require()` is no-op in an ESM module, use `createRequire()` to construct
-  // the require()` function.  This is only necessary for multi-environment
-  // builds, `-sENVIRONMENT=node` emits a static import declaration instead.
-  // TODO: Swap all `require()`'s with `import()`'s?
-  // These modules will usually be used on Node.js. Load them eagerly to avoid
-  // the complexity of lazy-loading.
-  var fs = crc64_require('fs');
-  var nodePath = crc64_require('path');
-
-  if (ENVIRONMENT_IS_WORKER) {
-    scriptDirectory = nodePath.dirname(scriptDirectory) + '/';
-  } else {
-    scriptDirectory = crc64_dirname + '/';
-  }
-
-// include: node_shell_read.js
-
-
-read_ = (filename, binary) => {
-  // We need to re-wrap `file://` strings to URLs. Normalizing isn't
-  // necessary in that case, the path should already be absolute.
-  filename = isFileURI(filename) ? new URL(filename) : nodePath.normalize(filename);
-  return fs.readFileSync(filename, binary ? undefined : 'utf8');
-};
-
-readBinary = (filename) => {
-  var ret = read_(filename, true);
-  if (!ret.buffer) {
-    ret = new Uint8Array(ret);
-  }
-  assert(ret.buffer);
-  return ret;
-};
-
-readAsync = (filename, onload, onerror) => {
-  // See the comment in the `read_` function.
-  filename = isFileURI(filename) ? new URL(filename) : nodePath.normalize(filename);
-  fs.readFile(filename, function(err, data) {
-    if (err) onerror(err);
-    else onload(data.buffer);
-  });
-};
-
-// end include: node_shell_read.js
-// NODE-READ-END
+  // The wasm is base64-embedded (see `binaryInString`) and loaded via `getBinary()`,
+  // so the Node fs/path read hooks emitted by Emscripten are never exercised and
+  // have been removed. This keeps the file free of Node built-in imports so it can be
+  // consumed as-is by web bundlers and by ESM-to-CommonJS bundlers (see issue #39057).
   if (process['argv'].length > 1) {
     thisProgram = process['argv'][1].replace(/\\/g, '/');
   }
@@ -128890,27 +129454,7 @@ readAsync = (filename, onload, onerror) => {
 } else
 if (ENVIRONMENT_IS_SHELL) {
 
-  if ((typeof process == 'object' && typeof crc64_require === 'function') || typeof window == 'object' || typeof importScripts == 'function') throw new Error('not compiled for this environment (did you build to HTML and try to run it not on the web, or set ENVIRONMENT to something - like node - and run it someplace else - like on the web?)');
-
-  if (typeof read != 'undefined') {
-    read_ = function shell_read(f) {
-      return read(f);
-    };
-  }
-
-  readBinary = function readBinary(f) {
-    let data;
-    if (typeof readbuffer == 'function') {
-      return new Uint8Array(readbuffer(f));
-    }
-    data = read(f, 'binary');
-    assert(typeof data == 'object');
-    return data;
-  };
-
-  readAsync = function readAsync(f, onload, onerror) {
-    setTimeout(() => onload(readBinary(f)), 0);
-  };
+  if ((typeof process == 'object' && typeof require === 'function') || typeof window == 'object' || typeof importScripts == 'function') throw new Error('not compiled for this environment (did you build to HTML and try to run it not on the web, or set ENVIRONMENT to something - like node - and run it someplace else - like on the web?)');
 
   if (typeof scriptArgs != 'undefined') {
     arguments_ = scriptArgs;
@@ -128938,72 +129482,9 @@ if (ENVIRONMENT_IS_SHELL) {
 // Node.js workers are detected as a combination of ENVIRONMENT_IS_WORKER and
 // ENVIRONMENT_IS_NODE.
 if (ENVIRONMENT_IS_WEB || ENVIRONMENT_IS_WORKER) {
-  if (ENVIRONMENT_IS_WORKER) { // Check worker, not web, since window could be polyfilled
-    scriptDirectory = self.location.href;
-  } else if (typeof document != 'undefined' && document.currentScript) { // web
-    scriptDirectory = document.currentScript.src;
-  }
-  // When MODULARIZE, this JS may be executed later, after document.currentScript
-  // is gone, so we saved it, and we use it here instead of any other info.
-  if (_scriptDir) {
-    scriptDirectory = _scriptDir;
-  }
-  // blob urls look like blob:http://site.com/etc/etc and we cannot infer anything from them.
-  // otherwise, slice off the final part of the url to find the script directory.
-  // if scriptDirectory does not contain a slash, lastIndexOf will return -1,
-  // and scriptDirectory will correctly be replaced with an empty string.
-  // If scriptDirectory contains a query (starting with ?) or a fragment (starting with #),
-  // they are removed because they could contain a slash.
-  if (scriptDirectory.indexOf('blob:') !== 0) {
-    scriptDirectory = scriptDirectory.substr(0, scriptDirectory.replace(/[?#].*/, "").lastIndexOf('/')+1);
-  } else {
-    scriptDirectory = '';
-  }
-
   if (!(typeof window == 'object' || typeof importScripts == 'function')) throw new Error('not compiled for this environment (did you build to HTML and try to run it not on the web, or set ENVIRONMENT to something - like node - and run it someplace else - like on the web?)');
-
-  // Differentiate the Web Worker from the Node Worker case, as reading must
-  // be done differently.
-  {
-// include: web_or_worker_shell_read.js
-
-
-  read_ = (url) => {
-      var xhr = new XMLHttpRequest();
-      xhr.open('GET', url, false);
-      xhr.send(null);
-      return xhr.responseText;
-  }
-
-  if (ENVIRONMENT_IS_WORKER) {
-    readBinary = (url) => {
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', url, false);
-        xhr.responseType = 'arraybuffer';
-        xhr.send(null);
-        return new Uint8Array(/** @type{!ArrayBuffer} */(xhr.response));
-    };
-  }
-
-  readAsync = (url, onload, onerror) => {
-    var xhr = new XMLHttpRequest();
-    xhr.open('GET', url, true);
-    xhr.responseType = 'arraybuffer';
-    xhr.onload = () => {
-      if (xhr.status == 200 || (xhr.status == 0 && xhr.response)) { // file URLs can return 0
-        onload(xhr.response);
-        return;
-      }
-      onerror();
-    };
-    xhr.onerror = onerror;
-    xhr.send(null);
-  }
-
-// end include: web_or_worker_shell_read.js
-  }
-
-  setWindowTitle = (title) => document.title = title;
+  // The XHR-based read hooks emitted by Emscripten are unused because the wasm is
+  // base64-embedded; they have been removed so the file contains no DOM/XHR I/O.
 } else
 {
   throw new Error('environment detection error');
@@ -132296,6 +132777,27 @@ function cache_getCachedDefaultHttpClient() {
     return _defaultHttpClient;
 }
 //# sourceMappingURL=cache.js.map
+;// CONCATENATED MODULE: ./node_modules/@azure/storage-common/dist/esm/StorageResponseFormat.js
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+/**
+ * Specifies the format the service should use to return list results.
+ */
+const StorageResponseFormat = {
+    /**
+     * Default. Currently maps to {@link StorageResponseFormat.Xml}, but may be updated in future releases.
+     */
+    Auto: "Auto",
+    /**
+     * Use XML to return list results.
+     */
+    Xml: "Xml",
+    /**
+     * Use Apache Arrow to return list results.
+     */
+    Arrow: "Arrow",
+};
+//# sourceMappingURL=StorageResponseFormat.js.map
 ;// CONCATENATED MODULE: ./node_modules/@azure/storage-common/dist/esm/policies/RequestPolicy.js
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
@@ -132493,7 +132995,7 @@ class AnonymousCredential extends Credential {
 ;// CONCATENATED MODULE: ./node_modules/@azure/storage-common/dist/esm/utils/constants.js
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
-const utils_constants_SDK_VERSION = "12.4.0";
+const utils_constants_SDK_VERSION = "12.5.0";
 const constants_URLConstants = {
     Parameters: {
         FORCE_BROWSER_NO_CACHE: "_",
@@ -133511,8 +134013,7 @@ class StorageRetryPolicy extends BaseRequestPolicy {
      */
     shouldRetry(isPrimaryRetry, attempt, response, err) {
         if (attempt >= this.retryOptions.maxTries) {
-            storage_common_dist_esm_log_logger.info(`RetryPolicy: Attempt(s) ${attempt} >= maxTries ${this.retryOptions
-                .maxTries}, no further try.`);
+            storage_common_dist_esm_log_logger.info(`RetryPolicy: Attempt(s) ${attempt} >= maxTries ${this.retryOptions.maxTries}, no further try.`);
             return false;
         }
         // Handle network failures, you may need to customize the list when you implement
@@ -133993,6 +134494,18 @@ function storageRequestFailureDetailsParserPolicy() {
         async sendRequest(request, next) {
             try {
                 const response = await next(request);
+                if (response.status === 400 &&
+                    response.bodyAsText?.includes("<Error><Code>InvalidHeaderValue</Code>") &&
+                    response.bodyAsText.includes("<HeaderName>x-ms-version</HeaderName>")) {
+                    // replace the error message with a more user-friendly one that includes a link to documentation
+                    /* example response text:
+                    `<?xml version="1.0" encoding="utf-8"?>
+          <Error><Code>InvalidHeaderValue</Code><Message>The value for one of the HTTP headers is not in the correct format.
+          RequestId:e5ea566c-101e-001c-1ec4-acf180000000
+          Time:2026-03-05T17:24:34.6688015Z</Message><HeaderName>x-ms-version</HeaderName><HeaderValue>3025-01-01</HeaderValue></Error>`
+                    */
+                    response.bodyAsText = response.bodyAsText.replace(/<Message>.*<\/Message>/s, "<Message>The provided service version is not enabled on this storage account. Please see https://learn.microsoft.com/rest/api/storageservices/versioning-for-the-azure-storage-services for additional information.</Message>");
+                }
                 return response;
             }
             catch (err) {
@@ -134058,6 +134571,8 @@ class UserDelegationKeyCredential {
 ;// CONCATENATED MODULE: ./node_modules/@azure/storage-common/dist/esm/indexPlatform.js
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+
+
 
 
 
@@ -163408,6 +163923,8 @@ var index_incubating = __nccwpck_require__(91958);
 const external_node_child_process_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:child_process");
 ;// CONCATENATED MODULE: external "node:fs/promises"
 const external_node_fs_promises_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:fs/promises");
+;// CONCATENATED MODULE: external "node:path"
+const external_node_path_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:path");
 ;// CONCATENATED MODULE: ./node_modules/@determinate-systems/detsys-ts/dist/index.mjs
 
 
@@ -163932,32 +164449,6 @@ function encodeOtlpHeaders(headers) {
 	return Object.entries(headers).map(([name, value]) => `${encodeURIComponent(name)}=${encodeURIComponent(value)}`).join(",");
 }
 /**
-* The generator of the trace and span IDs of this run.
-*
-* It makes random IDs, as the default generator does.
-* It can also give one span an identity that you supply.
-* That is how a span that one process announces starts in a different process.
-* See {@link Telemetry.startAnnouncedSpan}.
-*/
-var PinnedIdGenerator = class {
-	/** Give the next span this identity. */
-	pin(traceId, spanId) {
-		this.traceId = traceId;
-		this.spanId = spanId;
-	}
-	/** Give each subsequent span a random identity again. */
-	unpin() {
-		this.traceId = void 0;
-		this.spanId = void 0;
-	}
-	generateTraceId() {
-		return this.traceId ?? randomHex(16);
-	}
-	generateSpanId() {
-		return this.spanId ?? randomHex(8);
-	}
-};
-/**
 * Owns the OpenTelemetry SDK's lifecycle. Constructing this does nothing on
 * its own; `start()` registers the global providers and `shutdown()` flushes
 * whatever is buffered.
@@ -163983,10 +164474,8 @@ var Telemetry = class {
 				...options.serviceVersion === void 0 ? {} : { [semantic_conventions_build_src.ATTR_SERVICE_VERSION]: options.serviceVersion },
 				...options.resourceAttributes
 			})).merge(resources_build_src.detectResources({ detectors: [resources_build_src.envDetector] }));
-			this.idGenerator = new PinnedIdGenerator();
 			this.tracerProvider = new index_shim/* BasicTracerProvider */.l({
 				resource,
-				idGenerator: this.idGenerator,
 				spanProcessors: [new index_shim/* BatchSpanProcessor */.J(new exporter_trace_otlp_http_build_src/* OTLPTraceExporter */.Q())]
 			});
 			this.loggerProvider = new sdk_logs_build_src/* LoggerProvider */.IB({
@@ -164002,36 +164491,7 @@ var Telemetry = class {
 		} catch (e) {
 			this.tracerProvider = void 0;
 			this.loggerProvider = void 0;
-			this.idGenerator = void 0;
 			core_debug(`Failed to start OpenTelemetry export, continuing without it: ${stringifyError(e)}`);
-		}
-	}
-	/**
-	* Start the span that {@link newTraceparent} announced.
-	*
-	* A workflow job runs each Action as a process of its own.
-	* Thus a span that covers more than one Action can only start in one of them.
-	* The Action that announces such a span makes its identity known first, and
-	* starts the span itself last, in the process that runs at the end.
-	* The spans that already point at that identity then find their parent.
-	*
-	* The span starts at `startTime`, which is the moment of the announcement.
-	* It is a child of the span in `parentContext`, and a root span if that
-	* context holds no span.
-	*
-	* Returns undefined if the export is off, or if `traceparent` does not name a
-	* usable span.
-	*/
-	startAnnouncedSpan(name, traceparent, startTime, parentContext = src.ROOT_CONTEXT) {
-		const generator = this.idGenerator;
-		const spanContext = src.trace.getSpanContext(contextFromTraceparent(traceparent));
-		if (generator === void 0 || this.tracerProvider === void 0 || spanContext === void 0 || !src.isSpanContextValid(spanContext)) return;
-		const tracer = this.tracerProvider.getTracer(SCOPE_NAME, "1.0");
-		try {
-			generator.pin(spanContext.traceId, spanContext.spanId);
-			return tracer.startSpan(name, { startTime }, parentContext);
-		} finally {
-			generator.unpin();
 		}
 	}
 	/**
@@ -164050,7 +164510,6 @@ var Telemetry = class {
 		} finally {
 			this.tracerProvider = void 0;
 			this.loggerProvider = void 0;
-			this.idGenerator = void 0;
 		}
 	}
 };
@@ -164095,27 +164554,6 @@ function traceparentOf(span) {
 	return carrier["traceparent"];
 }
 /**
-* Make the identity of a span, but do not start the span.
-*
-* Announce the result to whatever must point at the span before it starts:
-* a different process, or a request this process makes too early to record.
-* Start the span itself with {@link Telemetry.startAnnouncedSpan}.
-*
-* The span is in the trace of `parent`, or in a new trace of its own if there
-* is no usable parent.
-* A new trace is sampled, because a process that only forwards an identity
-* cannot ask the sampler, and an unsampled parent would discard the work of
-* each process that joins.
-*/
-function newTraceparent(parent) {
-	const parentContext = src.trace.getSpanContext(contextFromTraceparent(parent));
-	if (parentContext !== void 0 && src.isSpanContextValid(parentContext)) {
-		const flags = parentContext.traceFlags.toString(16).padStart(2, "0");
-		return `00-${parentContext.traceId}-${randomHex(8)}-${flags}`;
-	}
-	return `00-${randomHex(16)}-${randomHex(8)}-01`;
-}
-/**
 * The W3C trace context headers of the operation in progress, for an outgoing
 * HTTP request.
 *
@@ -164125,7 +164563,7 @@ function newTraceparent(parent) {
 * The headers describe the span that is active now.
 * When no span is active yet -- a request the Action makes before it starts a
 * span of its own -- they describe the span that `$TRACEPARENT` names, which is
-* the span the Action announced, or the span of the workflow job.
+* the span of the program that started this one.
 *
 * The result is empty when the export is off.
 * A no-op span's context is all zeroes, and is not a valid parent.
@@ -164172,10 +164610,6 @@ async function withSpan(name, fn, attributes) {
 			span.end();
 		}
 	});
-}
-/** A random ID of `bytes` bytes, in the lowercase hex the W3C format uses. */
-function randomHex(bytes) {
-	return (0,external_node_crypto_.randomBytes)(bytes).toString("hex");
 }
 /** Reject if `promise` has not settled within `timeoutMs`. */
 async function withTimeout(promise, timeoutMs) {
@@ -164626,6 +165060,7 @@ const ATTR_PROJECT = "detsys.project";
 const ATTR_IDS_PROJECT = "detsys.ids_project";
 const ATTR_EXECUTION_PHASE = "detsys.execution_phase";
 const ATTR_CROSS_PHASE_ID = "detsys.cross_phase_id";
+const ATTR_INVOCATION_ID = "detsys.invocation_id";
 const ATTR_ANONYMOUS_ID = "detsys.anonymous_id";
 const ATTR_CORRELATION_SOURCE = "detsys.correlation_source";
 const ATTR_ARCH_OS = "detsys.arch_os";
@@ -164657,11 +165092,8 @@ const STATE_KEY_EXECUTION_PHASE = "detsys_action_execution_phase";
 const STATE_KEY_NIX_NOT_FOUND = "detsys_action_nix_not_found";
 const STATE_NOT_FOUND = "not-found";
 const STATE_KEY_CROSS_PHASE_ID = "detsys_cross_phase_id";
-const STATE_KEY_TRACEPARENT = "detsys_otel_traceparent";
-const STATE_KEY_JOB_TRACEPARENT = "detsys_otel_job_traceparent";
-const STATE_KEY_JOB_SPAN_START = "detsys_otel_job_span_start";
 const ENV_TRACEPARENT = "TRACEPARENT";
-const SPAN_JOB = "github_actions_job";
+const ENV_INVOCATION_ID = "DETSYS_INVOCATION_ID";
 const SPAN_CHECK_IN = "check_in";
 const CHECK_IN_ENDPOINT_TIMEOUT_MS = 1e3;
 const determinateStateDir = "/var/lib/determinate";
@@ -164717,6 +165149,7 @@ var DetSysAction = class {
 		this.features = {};
 		this.pendingAttributes = {};
 		this.getCrossPhaseId();
+		this.getInvocationId();
 		this.identity = identify();
 		this.archOs = getArchOs();
 		this.nixSystem = getNixPlatform(this.archOs);
@@ -164788,6 +165221,15 @@ var DetSysAction = class {
 	getUniqueId() {
 		return this.identity.github_workflow_run_differentiator_hash || process.env.RUNNER_TRACKING_ID || (0,external_node_crypto_.randomUUID)();
 	}
+	/**
+	* The ID of this Action, which every execution phase of it shares.
+	*
+	* Each phase reports a trace of its own.
+	* This ID is what puts the phases of one Action together, as
+	* `detsys.cross_phase_id`.
+	*
+	* The Action's state carries it from one phase to the next.
+	*/
 	getCrossPhaseId() {
 		let crossPhaseId = getState(STATE_KEY_CROSS_PHASE_ID);
 		if (crossPhaseId === "") {
@@ -164795,6 +165237,28 @@ var DetSysAction = class {
 			saveState(STATE_KEY_CROSS_PHASE_ID, crossPhaseId);
 		}
 		return crossPhaseId;
+	}
+	/**
+	* The ID of this workflow job, which every Action of the job shares.
+	*
+	* Each execution phase of each Action reports a trace of its own, and each
+	* program a phase runs reports its own data.
+	* This ID is what puts that data together: it is on the spans and the log
+	* records of every participant, as `detsys.invocation_id`.
+	*
+	* A job runs each Action as a process of its own.
+	* Thus the Actions can only agree on the ID through the job's environment.
+	* The first Action to run makes the ID and exports it as
+	* `$DETSYS_INVOCATION_ID`.
+	* Each later step finds it there: the other Actions, and the programs the
+	* workflow runs, such as Nix.
+	*/
+	getInvocationId() {
+		const invocationId = process.env[ENV_INVOCATION_ID];
+		if (invocationId !== void 0 && invocationId !== "") return invocationId;
+		const newInvocationId = (0,external_node_crypto_.randomUUID)();
+		exportVariable(ENV_INVOCATION_ID, newInvocationId);
+		return newInvocationId;
 	}
 	getCorrelationHashes() {
 		return this.identity;
@@ -164839,7 +165303,6 @@ var DetSysAction = class {
 	async executeAsync() {
 		const phaseStartTime = /* @__PURE__ */ new Date();
 		try {
-			this.announceJobTrace(phaseStartTime);
 			await this.startTelemetry();
 			this.startPhaseSpan(phaseStartTime);
 			await this.withPhaseSpanActive(async () => {
@@ -164906,72 +165369,27 @@ var DetSysAction = class {
 		});
 	}
 	/**
-	* Put every Action of this workflow job in one trace.
-	*
-	* A job runs each Action as a process of its own.
-	* Thus the Actions can only agree on a trace through the job's environment.
-	* The first Action to run makes the identity of the job's span and exports it
-	* as `$TRACEPARENT`.
-	* Each later step finds it there: the other Actions, and the programs the
-	* workflow runs, such as Nix.
-	*
-	* The span itself starts and ends in the post phase of the Action that
-	* announced it.
-	* GitHub Actions runs the post phases in the reverse of the order of the main
-	* phases, thus that phase is the last one of the job.
-	* The span then covers the whole job.
-	* See {@link endJobSpan}.
-	*
-	* A `$TRACEPARENT` that is already set belongs to an earlier Action, or to the
-	* system that started the workflow.
-	* Do not change it, and join that trace.
-	*/
-	announceJobTrace(startTime) {
-		if (!this.isMain || !exportEnabled()) return;
-		if (process.env[ENV_TRACEPARENT]) return;
-		const traceparent = newTraceparent();
-		exportVariable(ENV_TRACEPARENT, traceparent);
-		saveState(STATE_KEY_JOB_TRACEPARENT, traceparent);
-		saveState(STATE_KEY_JOB_SPAN_START, `${startTime.getTime()}`);
-	}
-	/**
-	* End the job's span, if this Action is the one that announced it.
-	*
-	* The span also starts here.
-	* A span belongs to the process that ends it, and the process that made the
-	* announcement stopped long ago.
-	* See {@link announceJobTrace}.
-	*/
-	endJobSpan() {
-		if (!this.isPost) return;
-		const traceparent = getState(STATE_KEY_JOB_TRACEPARENT);
-		if (traceparent === "") return;
-		const startTime = parseInt(getState(STATE_KEY_JOB_SPAN_START), 10);
-		this.telemetry.startAnnouncedSpan(SPAN_JOB, traceparent, new Date(Number.isFinite(startTime) ? startTime : Date.now()))?.end();
-	}
-	/**
 	* Start the root span of this execution phase.
 	*
 	* The span starts at the moment the phase did, and thus covers the start of
 	* the SDK, which comes before it.
 	*
-	* `main` and `post` are separate processes.
-	* Thus the main phase saves the identity of its span in the Action's state,
-	* and the post phase makes its span a child of it.
-	* A `$TRACEPARENT` in the environment is the span of the workflow job, or of
-	* the system that started the workflow.
+	* Each execution phase reports a trace of its own.
+	* A phase is a process of its own, and the phases of a job run minutes or
+	* hours apart, thus a trace that spans them says nothing a trace of each
+	* phase does not.
+	* The span is therefore the root of its trace, and joins no other.
+	*
+	* {@link getInvocationId} is what puts the traces of one job together, and
+	* {@link getCrossPhaseId} is what puts the phases of one Action together.
 	*/
 	startPhaseSpan(startTime) {
 		if (!this.telemetry.enabled) return;
-		const parent = getState(STATE_KEY_TRACEPARENT) || process.env[ENV_TRACEPARENT] || void 0;
-		const span = getTracer().startSpan(`${this.actionOptions.name}:${this.executionPhase}`, { startTime }, contextFromTraceparent(parent));
+		const span = getTracer().startSpan(`${this.actionOptions.name}:${this.executionPhase}`, { startTime }, src.ROOT_CONTEXT);
 		span.setAttributes(this.pendingAttributes);
 		this.pendingAttributes = {};
 		const traceparent = traceparentOf(span);
-		if (traceparent !== void 0) {
-			process.env[ENV_TRACEPARENT] = traceparent;
-			if (this.isMain) saveState(STATE_KEY_TRACEPARENT, traceparent);
-		}
+		if (traceparent !== void 0) process.env[ENV_TRACEPARENT] = traceparent;
 		this.phaseSpan = span;
 	}
 	/**
@@ -164991,6 +165409,7 @@ var DetSysAction = class {
 			[ATTR_IDS_PROJECT]: this.actionOptions.idsProjectName,
 			[ATTR_EXECUTION_PHASE]: this.executionPhase,
 			[ATTR_CROSS_PHASE_ID]: this.getCrossPhaseId(),
+			[ATTR_INVOCATION_ID]: this.getInvocationId(),
 			[ATTR_ANONYMOUS_ID]: this.identity.$anon_distinct_id,
 			[ATTR_CORRELATION_SOURCE]: this.identity.correlation_source,
 			[ATTR_ARCH_OS]: this.archOs,
@@ -165017,11 +165436,13 @@ var DetSysAction = class {
 	}
 	/**
 	* The environment variables that let a child process add data to this
-	* Action's trace: the current `$TRACEPARENT` and the OTLP export settings.
+	* Action's trace: the current `$TRACEPARENT`, the invocation ID, and the
+	* OTLP export settings.
 	*
 	* Add these variables to the environment of each child process to trace.
 	* A child that inherits this process's environment already has the OTLP
-	* settings; only `$TRACEPARENT` changes as the run proceeds.
+	* settings and the invocation ID; only `$TRACEPARENT` changes as the run
+	* proceeds.
 	*
 	* The result is empty if the OpenTelemetry export is off.
 	* Thus it is always safe to add them.
@@ -165029,6 +165450,7 @@ var DetSysAction = class {
 	async getTelemetryEnvironment() {
 		if (!this.telemetry.enabled) return {};
 		const environment = otlpExportEnvironment();
+		environment[ENV_INVOCATION_ID] = this.getInvocationId();
 		const traceparent = this.getTraceparent();
 		if (traceparent !== void 0) environment[ENV_TRACEPARENT] = traceparent;
 		return environment;
@@ -165303,7 +165725,6 @@ var DetSysAction = class {
 	async complete() {
 		this.phaseSpan?.end();
 		this.phaseSpan = void 0;
-		this.endJobSpan();
 		await this.telemetry.shutdown();
 	}
 	async getCheckInUrl() {
