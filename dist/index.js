@@ -171831,7 +171831,6 @@ function makeOptionsConfident(actionOptions) {
 // src/index.ts
 
 
-var EVENT_EXECUTION_FAILURE = "detsys.execution_failure";
 var ATTR_EXIT_CODE = "detsys.exit_code";
 var FlakeCheckerAction = class extends DetSysAction {
   constructor() {
@@ -171877,10 +171876,9 @@ var FlakeCheckerAction = class extends DetSysAction {
       });
       span.setAttribute(ATTR_EXIT_CODE, exitCode);
       if (exitCode !== 0) {
-        this.addEvent(EVENT_EXECUTION_FAILURE, {
-          [ATTR_EXIT_CODE]: exitCode
-        });
-        log_exports.setFailed(`Non-zero exit code of \`${exitCode}\`.`);
+        const failure = new Error(`Non-zero exit code of \`${exitCode}\`.`);
+        recordSpanError(span, failure);
+        log_exports.setFailed(failure);
       }
       return exitCode;
     });
