@@ -3,10 +3,9 @@ import {
   DetSysAction,
   inputs,
   log,
+  recordSpanError,
   withSpan,
 } from "@determinate-systems/detsys-ts";
-
-const EVENT_EXECUTION_FAILURE = "detsys.execution_failure";
 
 const ATTR_EXIT_CODE = "detsys.exit_code";
 
@@ -71,10 +70,11 @@ class FlakeCheckerAction extends DetSysAction {
       span.setAttribute(ATTR_EXIT_CODE, exitCode);
 
       if (exitCode !== 0) {
-        this.addEvent(EVENT_EXECUTION_FAILURE, {
-          [ATTR_EXIT_CODE]: exitCode,
-        });
-        log.setFailed(`Non-zero exit code of \`${exitCode}\`.`);
+        // The program failed, thus the span failed. The exit code is already
+        // on the span, which is all that the event carried.
+        const failure = new Error(`Non-zero exit code of \`${exitCode}\`.`);
+        recordSpanError(span, failure);
+        log.setFailed(failure);
       }
 
       return exitCode;
