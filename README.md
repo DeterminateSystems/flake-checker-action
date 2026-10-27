@@ -44,6 +44,7 @@ The Nix Flake Checker Action has a number of configuration parameters that you c
 | `ignore-missing-flake-lock` | Whether to ignore a missing `flake.lock` file, where the path to the file is the value of `flake-lock-path` parameter. If set to `false` (the default is `true`), the Action throws an error and the job fails if the lockfile is missing.                                            | `true`       |
 | `fail-mode`                 | Fail with an exit code of 1 if any issues are encountered.                                                                                                                                                                                                                            | `false`      |
 | `send-statistics`           | Anonymously report the number of issues detected by the flake checker. This reporting helps measure the effectiveness of the flake checker. Set to `false` to disable.                                                                                                                | `true`       |
+| `timeout-request`           | The timeout, in milliseconds, for downloading the `flake-checker` binary. This covers the whole download, not just the connection, and each retry gets the full timeout again. Increase this on runners with slow network connections.                                                | `10000`      |
 
 Here's an example non-default configuration:
 
