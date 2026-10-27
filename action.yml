@@ -52,6 +52,11 @@ inputs:
     description: |
       Run a version of flake-checker from somewhere already on disk. Intended only for testing the Action.
     required: false
+  timeout-request:
+    description: |
+      The timeout, in milliseconds, for downloading the `flake-checker` binary. This covers the whole download, not just the connection.
+      Each retry gets the full timeout again. Increase this on runners with slow network connections. Defaults to 10000 (10 seconds).
+    required: false
   _internal-strict-mode:
     description: Whether to fail when any errors are thrown. Used only to test the Action; do not set this in your own workflows.
     required: false
